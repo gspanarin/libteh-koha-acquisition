@@ -4,6 +4,8 @@ use Modern::Perl;
 
 use base qw(Koha::Plugins::Base);
 
+use File::Basename;
+use Cwd qw(abs_path);
 use C4::Context;
 use C4::Auth;
 use DBI;
@@ -11,9 +13,18 @@ use Data::Dumper;
 use Template;
 use utf8;
 use Encode qw( encode_utf8 );
-use C4::Output;
-use C4::XSLT;
+#use C4::Output;
+#use C4::XSLT;
 #use Koha::Plugin::LibTeh::AcquisitionCustom::Lib::DB;
+
+
+#BEGIN {
+#    my $plugin_dir = dirname( abs_path(__FILE__) );
+#    unshift @INC, "$plugin_dir/lib";
+#}
+
+#use DB;
+#use RTFParser;
 
 our $VERSION = "1.0.0";
 
@@ -34,7 +45,7 @@ sub new {
     $args->{metadata}->{class} = $class;
 
     my $self = $class->SUPER::new($args);
-    #$self->{db} = Koha::Plugin::Com::LibTeh::AcquisitionCustom::DB->new();
+    #$self->{db} = DB->new();
     return $self;
 }
 
@@ -54,7 +65,7 @@ sub tool {
 
     my $op = $cgi->param('op') || 'main';
 
-    if ($op eq 'kso_in' || $op eq 'cud-save_kso1') {
+    if ($op eq 'kso_in' or $op eq 'cud-save_kso1') {
         $self->page_kso_in();
     } elsif ( $op eq 'kso_out' ) {
         $self->page_kso_out();
@@ -272,7 +283,7 @@ sub page_kso_in {
             }, undef, $reg_date, $doc_num, $doc_num_supplier, $supplier_id, $finance_source, $total_amount, $titles_count, $items_count, $is_completed, $user_id, $user_id);
         }
 
-        //print $cgi->redirect("/cgi-bin/koha/plugins/run.pl?class=" . $self->{class} . "&method=tool&op=kso_in");
+        #print $cgi->redirect("/cgi-bin/koha/plugins/run.pl?class=" . $self->{class} . "&method=tool&op=kso_in");
         return;
     }
 
