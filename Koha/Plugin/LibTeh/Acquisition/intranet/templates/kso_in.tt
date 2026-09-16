@@ -280,7 +280,7 @@
             url: PLUGIN_URL,
             type: "GET",
             dataType: "json",
-            data: { op: 'get_kso_items', kso_id: id },
+            data: { op: 'get_kso1_items', doc_num: docNum },
             success: function(items) {
                 let html = '';
                 if (items && items.length > 0) {

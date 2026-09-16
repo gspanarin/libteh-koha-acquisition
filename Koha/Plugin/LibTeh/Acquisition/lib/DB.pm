@@ -1,4 +1,6 @@
-package Koha::Plugin::LibTeh::Acquisition::DB;
+package Koha::Plugin::LibTeh::Acquisition::lib::DB;
+
+use Modern::Perl;
 
 use strict;
 use warnings;
@@ -7,10 +9,14 @@ use C4::Context;
 
 sub new {
     my ($class) = @_;
-    my $self = {
-        dbh => C4::Context->dbh,
-    };
+    my $self = {};
     return bless $self, $class;
+}
+
+# Допоміжний метод для отримання свіжого $dbh
+sub dbh {
+    my ($self) = @_;
+    return C4::Context->dbh;
 }
 
 # -----------------------------------------------------------------------------
@@ -18,21 +24,27 @@ sub new {
 # -----------------------------------------------------------------------------
 
 sub init_schema {
-    my ($self) = @_;
-    my $dbh = $self->{dbh};
 
+    my ($self) = @_;
+    my $dbh = $self->dbh;
     # КСО 1 - Надходження
     $dbh->do("
         CREATE TABLE IF NOT EXISTS libteh_kso1 (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            act_number VARCHAR(64) NOT NULL,
-            act_date DATE NOT NULL,
-            supplier_id INT DEFAULT NULL,
-            supplier_name VARCHAR(255) DEFAULT NULL,
-            doc_type VARCHAR(64) DEFAULT NULL,
-            branchcode VARCHAR(10) DEFAULT NULL,
-            note TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            reg_date DATE NOT NULL,
+            doc_num VARCHAR(100) NOT NULL,
+            doc_num_supplier VARCHAR(100),
+            supplier_id INT,
+            finance_source VARCHAR(250),
+            titles_count INT DEFAULT 0,
+            items_count INT DEFAULT 0,
+            total_amount DECIMAL(10,2) DEFAULT 0.00,
+            is_completed TINYINT(1) DEFAULT 0,
+            metadata_xml TEXT,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            created_by INT,
+            updated_by INT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
@@ -40,26 +52,41 @@ sub init_schema {
     $dbh->do("
         CREATE TABLE IF NOT EXISTS libteh_kso2 (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            act_number VARCHAR(64) NOT NULL,
-            act_date DATE NOT NULL,
-            reason_code VARCHAR(64) NOT NULL,
-            branchcode VARCHAR(10) DEFAULT NULL,
-            note TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            reg_date DATE NOT NULL,
+            act_num VARCHAR(100) NOT NULL,
+            reason_code VARCHAR(50),
+            titles_count INT DEFAULT 0,
+            items_count INT DEFAULT 0,
+            total_amount DECIMAL(10,2) DEFAULT 0.00,
+            is_completed TINYINT(1) DEFAULT 0,
+            metadata_xml TEXT,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            created_by INT,
+            updated_by INT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
-    # Деталізація примірників КСО 2
-    $dbh->do("
-        CREATE TABLE IF NOT EXISTS libteh_kso2_items (
+    # КСО 3 - рух фонду
+    $dbh->do(qq{
+        CREATE TABLE IF NOT EXISTS libteh_kso3 (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            kso2_id INT NOT NULL,
-            total_items INT DEFAULT 1,
-            total_price DECIMAL(28,6) DEFAULT 0.000000,
-            FOREIGN KEY (kso2_id) REFERENCES libteh_kso2(id) ON DELETE CASCADE
+            period_title VARCHAR(255) NOT NULL,
+            base_id INT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            start_items INT DEFAULT 0,
+            start_amount DECIMAL(10,2) DEFAULT 0.00,
+            in_items INT DEFAULT 0,
+            in_amount DECIMAL(10,2) DEFAULT 0.00,
+            out_items INT DEFAULT 0,
+            out_amount DECIMAL(10,2) DEFAULT 0.00,
+            end_items INT DEFAULT 0,
+            end_amount DECIMAL(10,2) DEFAULT 0.00,
+            created_at DATETIME NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
-
+    });
+    
     # Аудит фонду (Сеанси перевірки)
     $dbh->do("
         CREATE TABLE IF NOT EXISTS libteh_fund_audit (
@@ -71,18 +98,7 @@ sub init_schema {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
 
-    # Зчитані примірники аудиту
-    $dbh->do("
-        CREATE TABLE IF NOT EXISTS libteh_audit_items (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            audit_id INT NOT NULL,
-            itemnumber INT NOT NULL,
-            barcode VARCHAR(64) NOT NULL,
-            scanned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_audit_item (audit_id, itemnumber),
-            FOREIGN KEY (audit_id) REFERENCES libteh_fund_audit(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    ");
+   
 
     # Розділи знань (RZN)
     $dbh->do("
@@ -105,199 +121,97 @@ sub init_schema {
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ");
+    
+    
 }
 
-# -----------------------------------------------------------------------------
-# 2. КСО 1 - НАДХОДЖЕННЯ (CRUD)
-# -----------------------------------------------------------------------------
 
-sub get_all_kso1 {
+sub destruct_schema {
     my ($self) = @_;
-    return $self->{dbh}->selectall_arrayref("
-        SELECT k.*, DATE_FORMAT(k.act_date, '%d.%m.%Y') as act_date_formatted
-        FROM libteh_kso1 k ORDER BY k.act_date DESC, k.id DESC
-    ", { Slice => {} });
+    my $dbh = $self->dbh;
+    
+    $dbh->do("DROP TABLE IF EXISTS libteh_kso1;");
+    $dbh->do("DROP TABLE IF EXISTS libteh_kso2;");
+    $dbh->do("DROP TABLE IF EXISTS libteh_kso3;");
+    $dbh->do("DROP TABLE IF EXISTS libteh_fund_audit;");
+    $dbh->do("DROP TABLE IF EXISTS libteh_rzn;");
+    $dbh->do("DROP TABLE IF EXISTS libteh_rtf_templates;");  
 }
-
+   
+            
 sub save_kso1 {
     my ($self, $data) = @_;
-    my $dbh = $self->{dbh};
+    my $dbh = $self->dbh;
 
     if ($data->{id}) {
         my $sth = $dbh->prepare("
             UPDATE libteh_kso1 
-            SET act_number=?, act_date=?, supplier_name=?, doc_type=?, branchcode=?, note=?
+            SET 
+                reg_date=?, 
+                doc_num=?, 
+                doc_num_supplier=?, 
+                supplier_id=?, 
+                finance_source=?, 
+                total_amount=?, 
+                titles_count=?, 
+                items_count=?, 
+                is_completed=?, 
+                updated_by=?
             WHERE id=?
         ");
-        $sth->execute($data->{act_number}, $data->{act_date}, $data->{supplier_name}, $data->{doc_type}, $data->{branchcode}, $data->{note}, $data->{id});
+        $sth->execute(
+            $data->{reg_date}, 
+            $data->{doc_num},
+            $data->{doc_num_supplier}, 
+            $data->{supplier_id}, 
+            $data->{finance_source}, 
+            $data->{total_amount}, 
+            $data->{titles_count}, 
+            $data->{items_count}, 
+            $data->{is_completed}, 
+            $data->{user_id}, 
+            $data->{id});
         return $data->{id};
     } else {
         my $sth = $dbh->prepare("
-            INSERT INTO libteh_kso1 (act_number, act_date, supplier_name, doc_type, branchcode, note)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO libteh_kso1 (
+                reg_date, 
+                doc_num, 
+                doc_num_supplier, 
+                supplier_id, 
+                finance_source, 
+                total_amount, 
+                titles_count, 
+                items_count, 
+                is_completed, 
+                created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
-        $sth->execute($data->{act_number}, $data->{act_date}, $data->{supplier_name}, $data->{doc_type}, $data->{branchcode}, $data->{note});
+        $sth->execute(
+            $data->{reg_date}, 
+            $data->{doc_num}, 
+            $data->{doc_num_supplier}, 
+            $data->{supplier_id}, 
+            $data->{finance_source}, 
+            $data->{total_amount}, 
+            $data->{titles_count}, 
+            $data->{items_count}, 
+            $data->{is_completed}, 
+            $data->{user_id});
         return $dbh->{mysql_insertid};
     }
 }
 
-sub delete_kso1 {
-    my ($self, $id) = @_;
-    return $self->{dbh}->do("DELETE FROM libteh_kso1 WHERE id = ?", undef, $id);
-}
 
-# -----------------------------------------------------------------------------
-# 3. КСО 2 - ВИБУТТЯ (CRUD)
-# -----------------------------------------------------------------------------
 
-sub get_all_kso2 {
-    my ($self) = @_;
-    return $self->{dbh}->selectall_arrayref("
-        SELECT 
-            k.id, k.act_number, k.reason_code, k.note, k.branchcode,
-            DATE_FORMAT(k.act_date, '%d.%m.%Y') AS act_date,
-            DATE_FORMAT(k.act_date, '%Y-%m-%d') AS act_date_iso,
-            b.branchname,
-            COALESCE(SUM(i.total_items), 0) AS total_items,
-            COALESCE(SUM(i.total_price), 0.00) AS total_price
-        FROM libteh_kso2 k
-        LEFT JOIN branches b ON k.branchcode = b.branchcode
-        LEFT JOIN libteh_kso2_items i ON k.id = i.kso2_id
-        GROUP BY k.id
-        ORDER BY k.act_date DESC, k.id DESC
-    ", { Slice => {} });
-}
 
-sub save_kso2 {
-    my ($self, $data) = @_;
-    my $dbh = $self->{dbh};
 
-    if ($data->{id}) {
-        $dbh->do("
-            UPDATE libteh_kso2 
-            SET act_number=?, act_date=?, reason_code=?, branchcode=?, note=?
-            WHERE id=?
-        ", undef, $data->{act_number}, $data->{act_date}, $data->{reason_code}, $data->{branchcode}, $data->{note}, $data->{id});
-        return $data->{id};
-    } else {
-        $dbh->do("
-            INSERT INTO libteh_kso2 (act_number, act_date, reason_code, branchcode, note)
-            VALUES (?, ?, ?, ?, ?)
-        ", undef, $data->{act_number}, $data->{act_date}, $data->{reason_code}, $data->{branchcode}, $data->{note});
-        return $dbh->{mysql_insertid};
-    }
-}
 
-sub delete_kso2 {
-    my ($self, $id) = @_;
-    return $self->{dbh}->do("DELETE FROM libteh_kso2 WHERE id = ?", undef, $id);
-}
 
-# -----------------------------------------------------------------------------
-# 4. АУДИТ ТА ПЕРЕВІРКА ФОНДУ (CRUD + AJAX Helpers)
-# -----------------------------------------------------------------------------
 
-sub get_active_audits {
-    my ($self) = @_;
-    return $self->{dbh}->selectall_arrayref("
-        SELECT a.*, b.branchname AS location_name,
-               (SELECT COUNT(*) FROM libteh_audit_items WHERE audit_id = a.id) AS scanned_count
-        FROM libteh_fund_audit a
-        LEFT JOIN branches b ON a.branchcode = b.branchcode
-        WHERE a.status = 'started'
-        ORDER BY a.id DESC
-    ", { Slice => {} });
-}
 
-sub add_audit_scan {
-    my ($self, $audit_id, $itemnumber, $barcode) = @_;
-    my $dbh = $self->{dbh};
 
-    my $sth = $dbh->prepare("
-        INSERT INTO libteh_audit_items (audit_id, itemnumber, barcode, scanned_at)
-        VALUES (?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE scanned_at = NOW()
-    ");
-    return $sth->execute($audit_id, $itemnumber, $barcode);
-}
 
-sub get_recent_scanned_items {
-    my ($self, $audit_id, $limit) = @_;
-    $limit ||= 10;
 
-    return $self->{dbh}->selectall_arrayref("
-        SELECT ai.barcode, DATE_FORMAT(ai.scanned_at, '%H:%i:%s') as scan_time,
-               b.title, i.location, i.itemcallnumber
-        FROM libteh_audit_items ai
-        JOIN items i ON ai.itemnumber = i.itemnumber
-        JOIN biblio b ON i.biblionumber = b.biblionumber
-        WHERE ai.audit_id = ?
-        ORDER BY ai.scanned_at DESC
-        LIMIT ?
-    ", { Slice => {} }, $audit_id, $limit);
-}
-
-# -----------------------------------------------------------------------------
-# 5. РОЗДІЛИ ЗНАНЬ RZN (CRUD)
-# -----------------------------------------------------------------------------
-
-sub get_all_rzn {
-    my ($self) = @_;
-    return $self->{dbh}->selectall_arrayref("
-        SELECT * FROM libteh_rzn ORDER BY sort_order ASC, id ASC
-    ", { Slice => {} });
-}
-
-sub save_rzn {
-    my ($self, $data) = @_;
-    my $dbh = $self->{dbh};
-
-    if ($data->{id}) {
-        return $dbh->do("UPDATE libteh_rzn SET code=?, name=?, sort_order=? WHERE id=?", 
-            undef, $data->{code}, $data->{name}, $data->{sort_order} || 10, $data->{id});
-    } else {
-        return $dbh->do("INSERT INTO libteh_rzn (code, name, sort_order) VALUES (?, ?, ?)", 
-            undef, $data->{code}, $data->{name}, $data->{sort_order} || 10);
-    }
-}
-
-sub delete_rzn {
-    my ($self, $id) = @_;
-    return $self->{dbh}->do("DELETE FROM libteh_rzn WHERE id = ?", undef, $id);
-}
-
-# -----------------------------------------------------------------------------
-# 6. RTF-ШАБЛОНИ (CRUD)
-# -----------------------------------------------------------------------------
-
-sub get_all_rtf_templates {
-    my ($self) = @_;
-    return $self->{dbh}->selectall_arrayref("
-        SELECT id, name, code, filename, DATE_FORMAT(updated_at, '%d.%m.%Y %H:%i') as updated_at
-        FROM libteh_rtf_templates ORDER BY id DESC
-    ", { Slice => {} });
-}
-
-sub get_rtf_template_by_code {
-    my ($self, $code) = @_;
-    return $self->{dbh}->selectrow_hashref("
-        SELECT * FROM libteh_rtf_templates WHERE code = ? LIMIT 1
-    ", undef, $code);
-}
-
-sub save_rtf_template {
-    my ($self, $name, $code, $filename, $content) = @_;
-    my $sth = $self->{dbh}->prepare("
-        INSERT INTO libteh_rtf_templates (name, code, filename, content, updated_at) 
-        VALUES (?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE name=?, filename=?, content=?, updated_at=NOW()
-    ");
-    return $sth->execute($name, $code, $filename, $content, $name, $filename, $content);
-}
-
-sub delete_rtf_template {
-    my ($self, $id) = @_;
-    return $self->{dbh}->do("DELETE FROM libteh_rtf_templates WHERE id = ?", undef, $id);
-}
 
 1;
