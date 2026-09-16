@@ -1,11 +1,9 @@
-Koha/Plugin/Com/Library/AcquisitionCustom/
-├── AcquisitionCustom.pm           # Головний PM-файл (хуки Koha, install/uninstall)
+Koha/Plugin/Com/Library/Acquisition/
+├── Acquisition.pm           # Головний PM-файл (хуки Koha, install/uninstall)
 ├── lib/
-│   └── AcquisitionCustom/
-│       ├── DB.pm                  # Робота з БД (CRUD для libteh_*)
-│       ├── RTFParser.pm           # Генератор/підстановник змінних у RTF
-│       └── Controller/            # Допоміжні модулі для розділів
-├── opac/                          # (якщо потрібен доступ з OPAC)
+│   ├── DB.pm                      # Робота з БД (CRUD для libteh_*)
+│   └── RTFParser.pm               # Генератор/підстановник змінних у RTF
+│
 └── intranet/                      # Шаблони для службового інтерфейсу
     ├── templates/
     │   ├── main.tt                # Головна сторінка плагіна

@@ -8,7 +8,7 @@
 [% WRAPPER 'header.inc' %]
     [% SET breadcrumbs = [
         { title => 'Комплектування', url => '/cgi-bin/koha/acqui/acqui-home.pl' },
-        { title => 'Плагін розширеного комплектування', url => '/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::AcquisitionCustom' },
+        { title => 'Плагін розширеного комплектування', url => '/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::Acquisition' },
         { title => 'Управління RTF-шаблонами' }
     ] %]
     [% INCLUDE 'breadcrumbs.inc' breadcrumbs=breadcrumbs %]
@@ -59,10 +59,10 @@
                                         <td><i class="fa fa-file-word-o"></i> [% tmpl.filename | html %]</td>
                                         <td>[% tmpl.updated_at | html %]</td>
                                         <td class="actions">
-                                            <a href="/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::AcquisitionCustom&op=download_rtf&code=[% tmpl.code | uri %]" class="btn btn-default btn-xs">
+                                            <a href="/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::Acquisition&op=download_rtf&code=[% tmpl.code | uri %]" class="btn btn-default btn-xs">
                                                 <i class="fa fa-download"></i> Скачати
                                             </a>
-                                            <a href="/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::AcquisitionCustom&op=rtf&action=delete&id=[% tmpl.id | uri %]" class="btn btn-danger btn-xs delete_tmpl">
+                                            <a href="/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::Acquisition&op=rtf&action=delete&id=[% tmpl.id | uri %]" class="btn btn-danger btn-xs delete_tmpl">
                                                 <i class="fa fa-trash"></i> Видалити
                                             </a>
                                         </td>
@@ -90,7 +90,7 @@
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <form action="/cgi-bin/koha/plugins/run.pl" method="post" enctype="multipart/form-data" class="validated">
-                <input type="hidden" name="class" value="Koha::Plugin::LibTeh::AcquisitionCustom" />
+                <input type="hidden" name="class" value="Koha::Plugin::LibTeh::Acquisition" />
                 <input type="hidden" name="op" value="rtf" />
                 <input type="hidden" name="action" value="upload" />
 

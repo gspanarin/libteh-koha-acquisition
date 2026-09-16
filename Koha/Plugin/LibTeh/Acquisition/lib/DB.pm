@@ -1,4 +1,4 @@
-package Koha::Plugin::LibTeh::AcquisitionCustom::DB;
+package Koha::Plugin::LibTeh::Acquisition::DB;
 
 use strict;
 use warnings;

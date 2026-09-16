@@ -1,9 +1,12 @@
+[% USE raw %]
+[% USE Koha %]
+[% USE Asset %]
+[% PROCESS 'i18n.inc' %]
+
 [% INCLUDE 'doc-head-open.inc' %]
 <title>Koha Plugin :: Книга сумарного обліку надходження (КСО 1)</title>
 [% INCLUDE 'doc-head-close.inc' %]
-
-<!-- DataTables css/js (вбудовані в Koha) -->
-<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
+<!-- Додаємо підключення стандартних скриптів та стилів DataTables для Koha -->
 [% INCLUDE 'datatables.inc' %]
 
 <style>
@@ -69,7 +72,7 @@
                             <td>[% row.finance_source | html %]</td>
                             <td>[% row.titles_count %]</td>
                             <td>[% row.items_count %]</td>
-                            <td>[% row.total_amount | $Price %]</td>
+                            <td>[% row.total_amount %]</td>
                             <td>
                                 [% IF row.is_completed %]
                                     <span class="badge badge-success badge-status"><i class="fa fa-check"></i> Завершено</span>
@@ -221,8 +224,10 @@
     const PLUGIN_URL = "/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool";
 
     $(document).ready(function() {
+        // Базові налаштування DataTables (fallback, якщо dataTablesDefaults не визначено)
+        var dtDefaults = (typeof dataTablesDefaults !== 'undefined') ? dataTablesDefaults : {};
         // Ініціалізація Koha DataTable
-        $("#table_kso1").dataTable($.extend(true, {}, setDataTableDefaults(), {
+        $("#table_kso1").dataTable($.extend(true, {}, dtDefaults, {
             "order": [[ 0, "desc" ]],
             "pageLength": 20
         }));

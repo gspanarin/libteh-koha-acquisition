@@ -1,4 +1,4 @@
-package Koha::Plugin::LibTeh::AcquisitionCustom;
+package Koha::Plugin::LibTeh::Acquisition;
 
 use Modern::Perl;
 
@@ -13,9 +13,9 @@ use Data::Dumper;
 use Template;
 use utf8;
 use Encode qw( encode_utf8 );
-#use C4::Output;
-#use C4::XSLT;
-#use Koha::Plugin::LibTeh::AcquisitionCustom::Lib::DB;
+use C4::Output;
+use C4::XSLT;
+#use Koha::Plugin::LibTeh::Acquisition::Lib::DB;
 
 
 #BEGIN {
@@ -45,6 +45,7 @@ sub new {
     $args->{metadata}->{class} = $class;
 
     my $self = $class->SUPER::new($args);
+    #$self->{db} = Koha::Plugin::Com::LibTeh::AcquisitionCustom::DB->new();
     #$self->{db} = DB->new();
     return $self;
 }
@@ -65,7 +66,7 @@ sub tool {
 
     my $op = $cgi->param('op') || 'main';
 
-    if ($op eq 'kso_in' or $op eq 'cud-save_kso1') {
+    if ($op eq 'kso_in' or $op eq 'cud-save_kso1' or $op eq 'get_kso1' or $op eq 'get_kso_items') {
         $self->page_kso_in();
     } elsif ( $op eq 'kso_out' ) {
         $self->page_kso_out();
@@ -85,6 +86,7 @@ sub install {
     my ( $self, $args ) = @_;
     my $dbh = C4::Context->dbh;
 
+=begin comment
     # 1. Таблиця КСО 1 (Надходження)
     $dbh->do(qq{
         CREATE TABLE IF NOT EXISTS libteh_kso1 (
@@ -105,7 +107,8 @@ sub install {
             updated_by INT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     });
-
+=cut
+=begin comment
     # 2. Таблиця КСО 2 (Вибуття)
     $dbh->do(qq{
         CREATE TABLE IF NOT EXISTS libteh_kso2 (
@@ -124,7 +127,8 @@ sub install {
             updated_by INT
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     });
-
+=cut
+=begin comment
     # 3. Таблиця Перевірки Фонду (Fund Audit)
     $dbh->do(qq{
         CREATE TABLE IF NOT EXISTS libteh_fund_audit (
@@ -137,7 +141,30 @@ sub install {
             created_at DATETIME NOT NULL
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     });
+=cut
 
+# 1. Створення таблиці КСО 3, якщо ще не створена
+=begin comment
+    $dbh->do(qq{
+        CREATE TABLE IF NOT EXISTS libteh_kso3_movement (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            period_title VARCHAR(255) NOT NULL,
+            base_id INT NULL,
+            start_date DATE NOT NULL,
+            end_date DATE NOT NULL,
+            start_items INT DEFAULT 0,
+            start_amount DECIMAL(10,2) DEFAULT 0.00,
+            in_items INT DEFAULT 0,
+            in_amount DECIMAL(10,2) DEFAULT 0.00,
+            out_items INT DEFAULT 0,
+            out_amount DECIMAL(10,2) DEFAULT 0.00,
+            end_items INT DEFAULT 0,
+            end_amount DECIMAL(10,2) DEFAULT 0.00,
+            created_at DATETIME NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    });
+=cut
+    
     # 4. Збереження прапорця інсталяції в налаштування плагіна
     #$self->store_data({ installed => 1, schema_version => '1.0' });
 
@@ -148,11 +175,11 @@ sub install {
 sub uninstall {
     my ( $self, $args ) = @_;
     my $dbh = C4::Context->dbh;
-
+=begin comment
     $dbh->do("DROP TABLE IF EXISTS libteh_kso1;");
     $dbh->do("DROP TABLE IF EXISTS libteh_kso2;");
     $dbh->do("DROP TABLE IF EXISTS libteh_fund_audit;");
-
+=cut
     return 1;
 }
 
@@ -283,9 +310,18 @@ sub page_kso_in {
             }, undef, $reg_date, $doc_num, $doc_num_supplier, $supplier_id, $finance_source, $total_amount, $titles_count, $items_count, $is_completed, $user_id, $user_id);
         }
 
-        #print $cgi->redirect("/cgi-bin/koha/plugins/run.pl?class=" . $self->{class} . "&method=tool&op=kso_in");
+        print $cgi->redirect("/cgi-bin/koha/plugins/run.pl?class=" . $self->{class} . "&method=tool&op=kso_in");
         return;
     }
+
+    #Обробка видалення зафіксованого періоду
+    if ($op eq 'delete_kso_in') {
+        my $id = $cgi->param('id');
+        $dbh->do("DELETE FROM libteh_kso1 WHERE id = ?", undef, $id);
+        print $cgi->redirect("/cgi-bin/koha/plugins/run.pl?class=" . $self->{cla    ss} . "&method=tool&op=kso_in");
+        return;
+    }
+    
 
     # 4. Основне виведення сторінки
     my $kso_list = $dbh->selectall_arrayref(qq{
@@ -314,25 +350,7 @@ sub page_kso_movement {
     my $dbh    = C4::Context->dbh;
     my $op     = $cgi->param('op') || '';
 
-    # 1. Створення таблиці КСО 3, якщо ще не створена
-    $dbh->do(qq{
-        CREATE TABLE IF NOT EXISTS libteh_kso3_movement (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            period_title VARCHAR(255) NOT NULL,
-            base_id INT NULL,
-            start_date DATE NOT NULL,
-            end_date DATE NOT NULL,
-            start_items INT DEFAULT 0,
-            start_amount DECIMAL(10,2) DEFAULT 0.00,
-            in_items INT DEFAULT 0,
-            in_amount DECIMAL(10,2) DEFAULT 0.00,
-            out_items INT DEFAULT 0,
-            out_amount DECIMAL(10,2) DEFAULT 0.00,
-            end_items INT DEFAULT 0,
-            end_amount DECIMAL(10,2) DEFAULT 0.00,
-            created_at DATETIME NOT NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    });
+    
 
     # 2. Обробка видалення зафіксованого періоду
     if ($op eq 'delete_kso_movement') {
@@ -626,7 +644,7 @@ sub handle_rtf_download {
     my $items    = $db->get_kso2_items($act_id); # Список примірників акту
 
     # 3. Ініціалізуємо парсер
-    my $parser = Koha::Plugin::LibTeh::AcquisitionCustom::AcquisitionCustom::RTFParser->new({
+    my $parser = Koha::Plugin::LibTeh::Acquisition::Acquisition::RTFParser->new({
         template_content => $tmpl_data->{content}
     });
 

@@ -1,4 +1,4 @@
-package Koha::Plugin::LibTeh::AcquisitionCustom::RTFParser;
+package Koha::Plugin::LibTeh::Acquisition::RTFParser;
 
 use strict;
 use warnings;
