@@ -1,0 +1,24 @@
+Koha/Plugin/Com/Library/AcquisitionCustom/
+├── AcquisitionCustom.pm           # Головний PM-файл (хуки Koha, install/uninstall)
+├── lib/
+│   └── AcquisitionCustom/
+│       ├── DB.pm                  # Робота з БД (CRUD для libteh_*)
+│       ├── RTFParser.pm           # Генератор/підстановник змінних у RTF
+│       └── Controller/            # Допоміжні модулі для розділів
+├── opac/                          # (якщо потрібен доступ з OPAC)
+└── intranet/                      # Шаблони для службового інтерфейсу
+    ├── templates/
+    │   ├── main.tt                # Головна сторінка плагіна
+    │   ├── kso_in.tt              # КСО Надходження
+    │   ├── kso_out.tt             # КСО Вибуття
+    │   ├── kso_movement.tt        # КСО Рух фонду
+    │   ├── fund_audit.tt          # Перевірка фонду (адаптивна для mobile)
+    │   └── settings.tt            # Налаштування та RTF шаблони
+    ├── css/
+    └── js/                        # Скрипти сканера штрих-кодів, DataTables тощо
+
+
+
+
+
+

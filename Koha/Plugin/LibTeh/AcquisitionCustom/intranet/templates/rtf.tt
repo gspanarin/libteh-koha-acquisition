@@ -1,0 +1,191 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha &rsaquo; Комплектування &rsaquo; RTF-шаблони звітів</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</style>
+</head>
+
+<body id="acq_rtf_templates" class="acq">
+[% WRAPPER 'header.inc' %]
+    [% SET breadcrumbs = [
+        { title => 'Комплектування', url => '/cgi-bin/koha/acqui/acqui-home.pl' },
+        { title => 'Плагін розширеного комплектування', url => '/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::AcquisitionCustom' },
+        { title => 'Управління RTF-шаблонами' }
+    ] %]
+    [% INCLUDE 'breadcrumbs.inc' breadcrumbs=breadcrumbs %]
+[% END %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-sm-10 col-sm-push-2">
+            <main>
+                <h1>Управління RTF-шаблонами звітів та актів</h1>
+
+                <!-- Блок сповіщень -->
+                [% IF message %]
+                    <div class="dialog message">[% message | html %]</div>
+                [% END %]
+
+                <!-- Кнопка додавання нового шаблону -->
+                <div id="toolbar" class="btn-toolbar">
+                    <button class="btn btn-default" data-toggle="modal" data-target="#uploadModal">
+                        <i class="fa fa-upload"></i> Завантажити новий RTF-шаблон
+                    </button>
+                    <button class="btn btn-info" data-toggle="modal" data-target="#helpModal">
+                        <i class="fa fa-question-circle"></i> Інструкція з розмітки змінних
+                    </button>
+                </div>
+
+                <!-- Таблиця існуючих шаблонів -->
+                <div class="page-section">
+                    <h2>Наявні шаблони у системі</h2>
+                    [% IF rtf_list.size %]
+                        <table id="rtf_table" class="table table-bordered table-striped">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Назва шаблону</th>
+                                    <th>Системний код (Code)</th>
+                                    <th>Ім'я оригінального файлу</th>
+                                    <th>Останнє оновлення</th>
+                                    <th>Дії</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                [% FOREACH tmpl IN rtf_list %]
+                                    <tr>
+                                        <td>[% tmpl.id | html %]</td>
+                                        <td><strong>[% tmpl.name | html %]</strong></td>
+                                        <td><code>[% tmpl.code | html %]</code></td>
+                                        <td><i class="fa fa-file-word-o"></i> [% tmpl.filename | html %]</td>
+                                        <td>[% tmpl.updated_at | html %]</td>
+                                        <td class="actions">
+                                            <a href="/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::AcquisitionCustom&op=download_rtf&code=[% tmpl.code | uri %]" class="btn btn-default btn-xs">
+                                                <i class="fa fa-download"></i> Скачати
+                                            </a>
+                                            <a href="/cgi-bin/koha/plugins/run.pl?class=Koha::Plugin::LibTeh::AcquisitionCustom&op=rtf&action=delete&id=[% tmpl.id | uri %]" class="btn btn-danger btn-xs delete_tmpl">
+                                                <i class="fa fa-trash"></i> Видалити
+                                            </a>
+                                        </td>
+                                    </tr>
+                                [% END %]
+                            </tbody>
+                        </table>
+                    [% ELSE %]
+                        <div class="dialog message">Завантажених RTF-шаблонів поки немає.</div>
+                    [% END %]
+                </div>
+            </main>
+        </div>
+
+        <div class="col-sm-2 col-sm-pull-10">
+            <aside>
+                [% INCLUDE 'tools-menu.inc' %]
+            </aside>
+        </div>
+    </div>
+</div>
+
+<!-- Модальне вікно: Завантаження RTF -->
+<div class="modal fade" id="uploadModal" tabindex="-1" role="dialog" aria-labelledby="uploadModalLabel">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form action="/cgi-bin/koha/plugins/run.pl" method="post" enctype="multipart/form-data" class="validated">
+                <input type="hidden" name="class" value="Koha::Plugin::LibTeh::AcquisitionCustom" />
+                <input type="hidden" name="op" value="rtf" />
+                <input type="hidden" name="action" value="upload" />
+
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="uploadModalLabel">Завантаження RTF-шаблону</h4>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="name" class="required">Назва шаблону:</label>
+                        <input type="text" id="name" name="name" class="form-control" placeholder="напр., Акт вибуття КСО-2" required="required" />
+                    </div>
+                    <div class="form-group">
+                        <label for="code" class="required">Унікальний системний код:</label>
+                        <input type="text" id="code" name="code" class="form-control" placeholder="напр., kso2_act" pattern="[a-zA-Z0-9_]+" required="required" />
+                        <span class="hint">Дозволено лише латинські літери, цифри та знак підкреслення.</span>
+                    </div>
+                    <div class="form-group">
+                        <label for="file" class="required">Файл шаблону (.rtf):</label>
+                        <input type="file" id="file" name="file" accept=".rtf" required="required" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="submit" class="btn btn-primary"><i class="fa fa-save"></i> Зберегти шаблон</button>
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Скасувати</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Модальне вікно: Довідка з тегів -->
+<div class="modal fade" id="helpModal" tabindex="-1" role="dialog" aria-labelledby="helpModalLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="helpModalLabel">Інструкція з розмітки шаблонів MS Word (.rtf)</h4>
+            </div>
+            <div class="modal-body">
+                <p>Для формування автоматичних звітів використовуйте у своєму MS Word файлі спеціальні теги у фігурних дужках:</p>
+
+                <h4>1. Одиночні змінні (Заголовок документа):</h4>
+                <ul>
+                    <li><code>{ACT_NUMBER}</code> — Номер акта / документа</li>
+                    <li><code>{ACT_DATE}</code> — Дата акта</li>
+                    <li><code>{REASON_NAME}</code> — Причина вибуття / надходження</li>
+                    <li><code>{TOTAL_QTY}</code> — Загальна кількість примірників</li>
+                    <li><code>{TOTAL_PRICE}</code> — Загальна сума (грн)</li>
+                    <li><code>{BRANCH_NAME}</code> — Назва підрозділу/бібліотеки</li>
+                </ul>
+
+                <h4>2. Динамічні таблиці (Цикли для списку книг/примірників):</h4>
+                <p>У таблиці MS Word розмістіть тег початку циклу в першій комірці рядка, а тег завершення — в останній:</p>
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>№ п/п</th>
+                            <th>Назва та автор</th>
+                            <th>Штрихкод</th>
+                            <th>Ціна</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>{START_LOOP_ITEMS}</code> 1</td>
+                            <td><code>{TITLE}</code></td>
+                            <td><code>{BARCODE}</code></td>
+                            <td><code>{PRICE}</code> <code>{END_LOOP_ITEMS}</code></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Зрозуміло</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+[% INCLUDE 'intranet-bottom.inc' %]
+
+<script type="text/javascript">
+    $(document).ready(function() {
+        // Ініціалізація DataTables для швидкого пошуку та сортування
+        if ($("#rtf_table").length) {
+            $("#rtf_table").dataTable($.extend(true, {}, dataTablesDefaults, {
+                "order": [[ 0, "desc" ]],
+                "paginationType": "full"
+            }));
+        }
+
+        // Підтвердження видалення шаблону
+        $(".delete_tmpl").on("click", function(e) {
+            return confirm("Ви дійсно бажаєте видалити цей RTF-шаблон?");
+        });
+    });
+</script>

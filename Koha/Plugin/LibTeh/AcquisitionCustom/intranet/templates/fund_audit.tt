@@ -1,0 +1,276 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin :: Перевірка фонду (Аудит)</title>
+[% INCLUDE 'doc-head-close.inc' %]
+
+<!-- css & js dependencies -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+    .mobile-audit-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 10px;
+    }
+    #reader {
+        width: 100%;
+        background-color: #f8f9fa;
+        border: 2px dashed #007bff;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 15px;
+    }
+    .status-card {
+        padding: 15px;
+        border-radius: 8px;
+        margin-top: 15px;
+        display: none;
+        font-size: 1.1em;
+    }
+    .status-success {
+        background-color: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    .status-warning {
+        background-color: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffeeba;
+    }
+    .status-error {
+        background-color: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    .stats-badge {
+        font-size: 1.2em;
+        font-weight: bold;
+    }
+    .scan-input-group {
+        margin-bottom: 15px;
+    }
+</style>
+</head>
+
+<body id="plug_fund_audit" class="plug">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-toolbar.inc' %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <p><a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool">&laquo; Назад до плагіна</a></p>
+
+            [% IF op == 'scan_mode' %]
+                <!-- РЕЖИМ СКУНУВАННЯ (МОБІЛЬНИЙ) -->
+                <div class="mobile-audit-container">
+                    <h3>Перевірка: [% audit.audit_title | html %]</h3>
+                    <p>
+                        <strong>Підрозділ:</strong> [% audit.branch_id | html %] | 
+                        <strong>Проскановано:</strong> <span id="scanned_count" class="badge badge-info stats-badge">[% audit.total_scanned || 0 %]</span>
+                    </p>
+
+                    <!-- Вікно камери -->
+                    <div id="reader"></div>
+
+                    <!-- Ручне введення або апаратний сканер -->
+                    <div class="scan-input-group">
+                        <form id="manual_scan_form" onsubmit="return false;">
+                            <div class="input-group">
+                                <input type="text" id="barcode_input" class="form-control form-control-lg" placeholder="Штрих-код (або сканер)..." autocomplete="off" autofocus />
+                                <div class="input-group-append">
+                                    <button class="btn btn-primary" type="submit" id="btn_manual_send">ОК</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Індикатори статусу -->
+                    <div id="status_box" class="status-card">
+                        <div id="status_message"></div>
+                        <div id="item_details" style="font-size: 0.9em; margin-top: 8px;"></div>
+                    </div>
+                </div>
+
+                <!-- Звукові сигнали підтвердження -->
+                <audio id="sound_success" src="https://actions.google.com/sounds/v1/tones/beep_short.ogg" preload="auto"></audio>
+                <audio id="sound_error" src="https://actions.google.com/sounds/v1/alerts/error_tone.ogg" preload="auto"></audio>
+
+                <script>
+                    const AUDIT_ID = "[% audit.id %]";
+                    const TARGET_BRANCH = "[% audit.branch_id %]";
+                    const PLUGIN_URL = "/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool";
+
+                    let html5QrcodeScanner;
+                    let lastScannedBarcode = "";
+                    let isProcessing = false;
+
+                    $(document).ready(function() {
+                        // 1. Ініціалізація HTML5 QR/Barcode Сканера
+                        html5QrcodeScanner = new Html5QrcodeScanner(
+                            "reader", 
+                            { 
+                                fps: 10, 
+                                qrbox: { width: 250, height: 150 },
+                                aspectRatio: 1.333333,
+                                formatsToSupport: [ 
+                                    Html5QrcodeSupportedFormats.CODE_128,
+                                    Html5QrcodeSupportedFormats.EAN_13,
+                                    Html5QrcodeSupportedFormats.CODE_39
+                                ]
+                            },
+                            /* verbose= */ false
+                        );
+                        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+
+                        // 2. Обробка введення з апаратного сканера або текстового поля
+                        $('#manual_scan_form').on('submit', function(e) {
+                            e.preventDefault();
+                            let barcode = $('#barcode_input').val().trim();
+                            if (barcode) {
+                                processBarcode(barcode);
+                                $('#barcode_input').val('');
+                            }
+                        });
+                    });
+
+                    // Колбек при вдалому зчитуванні з камери
+                    function onScanSuccess(decodedText, decodedResult) {
+                        if (isProcessing || decodedText === lastScannedBarcode) {
+                            return; // Захист від дублювання повторних кадрів
+                        }
+                        processBarcode(decodedText);
+                    }
+
+                    function onScanFailure(error) {
+                        // Ігноруємо проміжні помилки пошуку штрих-коду на кожному кадрі
+                    }
+
+                    // AJAX-відправка штрих-коду на сервер
+                    function processBarcode(barcode) {
+                        isProcessing = true;
+                        lastScannedBarcode = barcode;
+
+                        $.ajax({
+                            url: PLUGIN_URL,
+                            type: "POST",
+                            dataType: "json",
+                            data: {
+                                op: 'ajax_audit_scan',
+                                audit_id: AUDIT_ID,
+                                barcode: barcode
+                            },
+                            success: function(response) {
+                                renderResponse(response);
+                            },
+                            error: function() {
+                                showStatus("Помилка зв'язку з сервером!", "error");
+                                playSound('error');
+                            },
+                            complete: function() {
+                                isProcessing = false;
+                                $('#barcode_input').focus();
+                                // Скидання затримки для повторного сканування того ж коду
+                                setTimeout(() => { lastScannedBarcode = ""; }, 2000);
+                            }
+                        });
+                    }
+
+                    // Відображення результату обробки
+                    function renderResponse(res) {
+                        if (!res.success) {
+                            showStatus("<strong>ПОМИЛКА:</strong> " + res.message, "error");
+                            playSound('error');
+                            return;
+                        }
+
+                        // Оновлення лічильника
+                        $('#scanned_count').text(res.total_scanned);
+
+                        let details = `<strong>Назва:</strong> ${res.title}<br><strong>Штрих-код:</strong> ${res.barcode}`;
+
+                        // Перевірка відповідності підрозділу
+                        if (res.homebranch !== TARGET_BRANCH) {
+                            showStatus(
+                                `<strong>ПОПЕРЕДЖЕННЯ!</strong> Книга належить іншому підрозділу (${res.homebranch})!`, 
+                                "warning", 
+                                details
+                            );
+                            playSound('error');
+                        } else {
+                            showStatus(
+                                `<strong>УСПІШНО!</strong> Книгу відмічено в аудиті.`, 
+                                "success", 
+                                details
+                            );
+                            playSound('success');
+                        }
+                    }
+
+                    function showStatus(msg, type, details = "") {
+                        let $box = $('#status_box');
+                        $box.removeClass('status-success status-warning status-error');
+                        
+                        if (type === 'success') $box.addClass('status-success');
+                        if (type === 'warning') $box.addClass('status-warning');
+                        if (type === 'error') $box.addClass('status-error');
+
+                        $('#status_message').html(msg);
+                        $('#item_details').html(details);
+                        $box.show();
+                    }
+
+                    function playSound(type) {
+                        let sound = document.getElementById(type === 'success' ? 'sound_success' : 'sound_error');
+                        if (sound) {
+                            sound.currentTime = 0;
+                            sound.play().catch(e => console.log("Audio play blocked"));
+                        }
+                    }
+                </script>
+
+            [% ELSE %]
+                <!-- РЕЖИМ ПЕРЕГЛЯДУ СПИСКУ АУДИТІВ -->
+                <h2>Перевірка фонду (Інвентаризація)</h2>
+                <p><a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=audit_new" class="btn btn-primary"><i class="fa fa-plus"></i> Створити нову перевірку</a></p>
+
+                <table class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Дата створення</th>
+                            <th>Назва перевірки</th>
+                            <th>Підрозділ (Branch)</th>
+                            <th>Статус</th>
+                            <th>Проскановано</th>
+                            <th>Дії</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        [% FOREACH a IN audits %]
+                            <tr>
+                                <td>[% a.id %]</td>
+                                <td>[% a.created_date %]</td>
+                                <td><strong>[% a.audit_title | html %]</strong></td>
+                                <td>[% a.branch_id | html %]</td>
+                                <td>
+                                    [% IF a.status == 'planned' %]<span class="badge badge-secondary">Заплановано</span>[% END %]
+                                    [% IF a.status == 'started' %]<span class="badge badge-primary">Розпочато</span>[% END %]
+                                    [% IF a.status == 'completed' %]<span class="badge badge-success">Завершено</span>[% END %]
+                                    [% IF a.status == 'canceled' %]<span class="badge badge-danger">Скасовано</span>[% END %]
+                                </td>
+                                <td>[% a.total_scanned %]</td>
+                                <td>
+                                    <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=scan_mode&audit_id=[% a.id %]" class="btn btn-sm btn-success"><i class="fa fa-barcode"></i> Сканувати</a>
+                                </td>
+                            </tr>
+                        [% END %]
+                    </tbody>
+                </table>
+            [% END %]
+
+        </div>
+    </div>
+</div>
+
+[% INCLUDE 'intranet-bottom.inc' %]

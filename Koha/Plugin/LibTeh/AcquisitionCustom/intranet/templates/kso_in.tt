@@ -1,0 +1,308 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin :: Книга сумарного обліку надходження (КСО 1)</title>
+[% INCLUDE 'doc-head-close.inc' %]
+
+<!-- DataTables css/js (вбудовані в Koha) -->
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
+[% INCLUDE 'datatables.inc' %]
+
+<style>
+    .kso-completed {
+        background-color: #e8f5e9 !important;
+    }
+    .badge-status {
+        font-size: 0.9em;
+        padding: 5px 10px;
+    }
+    .action-btns .btn {
+        margin-right: 2px;
+    }
+    .modal-lg-custom {
+        max-width: 900px;
+    }
+</style>
+</head>
+
+<body id="plug_kso_in" class="plug">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-toolbar.inc' %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <p><a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool">&laquo; Назад до головної плагіна</a></p>
+
+            <h2>Книга сумарного обліку надходження (КСО 1)</h2>
+
+            <!-- Кнопки верхньої панелі -->
+            <div id="toolbar" class="btn-toolbar" style="margin-bottom: 15px;">
+                <button type="button" class="btn btn-primary" onclick="openKsoModal();">
+                    <i class="fa fa-plus"></i> Новий запис КСО
+                </button>
+            </div>
+
+            <!-- Головна таблиця КСО 1 -->
+            <table id="table_kso1" class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Дата реєстрації</th>
+                        <th>№ партії (КСО)</th>
+                        <th>№ супров. документа</th>
+                        <th>Джерело надходження</th>
+                        <th>Джерело фінансування</th>
+                        <th>Найменувань</th>
+                        <th>Примірників</th>
+                        <th>Сума (грн)</th>
+                        <th>Стан</th>
+                        <th>Дії</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    [% FOREACH row IN kso_list %]
+                        <tr class="[% IF row.is_completed %]kso-completed[% END %]">
+                            <td>[% row.id %]</td>
+                            <td>[% row.reg_date %]</td>
+                            <td><strong>[% row.doc_num | html %]</strong></td>
+                            <td>[% row.doc_num_supplier | html %]</td>
+                            <td>[% row.supplier_name | html %]</td>
+                            <td>[% row.finance_source | html %]</td>
+                            <td>[% row.titles_count %]</td>
+                            <td>[% row.items_count %]</td>
+                            <td>[% row.total_amount | $Price %]</td>
+                            <td>
+                                [% IF row.is_completed %]
+                                    <span class="badge badge-success badge-status"><i class="fa fa-check"></i> Завершено</span>
+                                [% ELSE %]
+                                    <span class="badge badge-warning badge-status"><i class="fa fa-clock-o"></i> В обробці</span>
+                                [% END %]
+                            </td>
+                            <td class="action-btns">
+                                <button class="btn btn-sm btn-info" onclick="viewKsoItems([% row.id %], '[% row.doc_num | html %]')">
+                                    <i class="fa fa-eye"></i> Примірники
+                                </button>
+                                
+                                [% IF !row.is_completed %]
+                                    <button class="btn btn-sm btn-secondary" onclick="editKso([% row.id %])">
+                                        <i class="fa fa-pencil"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteKso([% row.id %])">
+                                        <i class="fa fa-trash"></i>
+                                    </button>
+                                [% END %]
+                            </td>
+                        </tr>
+                    [% END %]
+                </tbody>
+            </table>
+
+        </div>
+    </div>
+</div>
+
+<!-- ==================== МОДАЛЬНЕ ВІКНО: СТВОРЕННЯ / РЕДАГУВАННЯ КСО ==================== -->
+<div class="modal fade" id="ksoEditModal" tabindex="-1" role="dialog" aria-labelledby="ksoEditModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <form id="kso_form" method="post" action="/cgi-bin/koha/plugins/run.pl">
+                [% INCLUDE 'csrf-token.inc' %]
+                <input type="hidden" name="class" value="[% PLUGIN_CLASS %]" />
+                <input type="hidden" name="method" value="tool" />
+                <input type="hidden" name="op" value="cud-save_kso1" />
+                <input type="hidden" name="kso_id" id="kso_id" value="" />
+
+                <div class="modal-header">
+                    <h5 class="modal-title" id="ksoEditModalLabel">Запис Книги сумарного обліку</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label for="reg_date" class="required">Дата реєстрації партії:</label>
+                            <input type="date" class="form-control" id="reg_date" name="reg_date" required />
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label for="doc_num" class="required">Номер партії (№ запису КСО):</label>
+                            <input type="text" class="form-control" id="doc_num" name="doc_num" placeholder="напр. 12/2026" required />
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label for="doc_num_supplier">Номер супровідного документа:</label>
+                            <input type="text" class="form-control" id="doc_num_supplier" name="doc_num_supplier" placeholder="Накладна №..." />
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label for="supplier_id">Джерело надходження (Постачальник):</label>
+                            <select class="form-control" id="supplier_id" name="supplier_id">
+                                <option value="">-- Оберіть постачальника --</option>
+                                [% FOREACH s IN suppliers %]
+                                    <option value="[% s.id %]">[% s.name | html %]</option>
+                                [% END %]
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label for="finance_source">Джерело фінансування:</label>
+                            <input type="text" class="form-control" id="finance_source" name="finance_source" placeholder="Загальний фонд, дарунок тощо" />
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label for="total_amount">Сума за документ (грн):</label>
+                            <input type="number" step="0.01" class="form-control" id="total_amount" name="total_amount" value="0.00" />
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 form-group">
+                            <label for="titles_count">Кількість найменувань:</label>
+                            <input type="number" class="form-control" id="titles_count" name="titles_count" value="0" />
+                        </div>
+                        <div class="col-md-6 form-group">
+                            <label for="items_count">Кількість примірників:</label>
+                            <input type="number" class="form-control" id="items_count" name="items_count" value="0" />
+                        </div>
+                    </div>
+
+                    <div class="form-group form-check">
+                        <input type="checkbox" class="form-check-input" id="is_completed" name="is_completed" value="1" />
+                        <label class="form-check-label" for="is_completed"><strong>Обробку партії завершено</strong> (блокує подальше редагування)</label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-primary">Зберегти запис</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ==================== МОДАЛЬНЕ ВІКНО: ПЕРЕГЛЯД ПОВ'ЯЗАНИХ ПРИМІРНИКІВ ==================== -->
+<div class="modal fade" id="ksoItemsModal" tabindex="-1" role="dialog" aria-labelledby="ksoItemsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg-custom" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ksoItemsModalLabel">Примірники партії КСО № <span id="view_kso_num"></span></h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <table id="table_kso_items" class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Штрих-код</th>
+                            <th>Інв. номер</th>
+                            <th>Назва видання / Автор</th>
+                            <th>Сигнатура (Шифр)</th>
+                            <th>Ціна (грн)</th>
+                            <th>Підрозділ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="kso_items_tbody">
+                        <!-- AJAX заповнення -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Закрити</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const PLUGIN_URL = "/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool";
+
+    $(document).ready(function() {
+        // Ініціалізація Koha DataTable
+        $("#table_kso1").dataTable($.extend(true, {}, setDataTableDefaults(), {
+            "order": [[ 0, "desc" ]],
+            "pageLength": 20
+        }));
+    });
+
+    // Відкриття форми для нового запису
+    function openKsoModal() {
+        $('#kso_form')[0].reset();
+        $('#kso_id').val('');
+        $('#ksoEditModalLabel').text('Новий запис КСО (Надходження)');
+        // Встановлення поточної дати за замовчуванням
+        $('#reg_date').val(new Date().toISOString().substring(0, 10));
+        $('#ksoEditModal').modal('show');
+    }
+
+    // Завантаження даних для редагування
+    function editKso(id) {
+        $.ajax({
+            url: PLUGIN_URL,
+            type: "GET",
+            dataType: "json",
+            data: { op: 'get_kso1', id: id },
+            success: function(data) {
+                if (data) {
+                    $('#kso_id').val(data.id);
+                    $('#reg_date').val(data.reg_date);
+                    $('#doc_num').val(data.doc_num);
+                    $('#doc_num_supplier').val(data.doc_num_supplier);
+                    $('#supplier_id').val(data.supplier_id);
+                    $('#finance_source').val(data.finance_source);
+                    $('#total_amount').val(data.total_amount);
+                    $('#titles_count').val(data.titles_count);
+                    $('#items_count').val(data.items_count);
+                    $('#is_completed').prop('checked', data.is_completed == 1);
+
+                    $('#ksoEditModalLabel').text('Редагування запису КСО № ' + data.doc_num);
+                    $('#ksoEditModal').modal('show');
+                }
+            }
+        });
+    }
+
+    // Завантаження та відображення примірників, пов'язаних з цим записом КСО
+    function viewKsoItems(id, docNum) {
+        $('#view_kso_num').text(docNum);
+        $('#kso_items_tbody').html('<tr><td colspan="6" class="text-center"><i class="fa fa-spinner fa-spin"></i> Завантаження...</td></tr>');
+        $('#ksoItemsModal').modal('show');
+
+        $.ajax({
+            url: PLUGIN_URL,
+            type: "GET",
+            dataType: "json",
+            data: { op: 'get_kso_items', kso_id: id },
+            success: function(items) {
+                let html = '';
+                if (items && items.length > 0) {
+                    items.forEach(function(item) {
+                        html += `<tr>
+                            <td><strong>${item.barcode || ''}</strong></td>
+                            <td>${item.stocknumber || ''}</td>
+                            <td><a href="/cgi-bin/koha/catalogue/detail.pl?biblionumber=${item.biblionumber}" target="_blank">${item.title || ''}</a></td>
+                            <td>${item.itemcallnumber || ''}</td>
+                            <td>${item.price || '0.00'}</td>
+                            <td>${item.homebranch || ''}</td>
+                        </tr>`;
+                    });
+                } else {
+                    html = '<tr><td colspan="6" class="text-center text-muted">Пов\'язаних примірників не знайдено</td></tr>';
+                }
+                $('#kso_items_tbody').html(html);
+            }
+        });
+    }
+
+    // Видалення запису
+    function deleteKso(id) {
+        if (confirm("Ви дійсно бажаєте видалити цей запис КСО?")) {
+            window.location.href = PLUGIN_URL + "&op=delete_kso1&id=" + id;
+        }
+    }
+</script>
+
+[% INCLUDE 'intranet-bottom.inc' %]

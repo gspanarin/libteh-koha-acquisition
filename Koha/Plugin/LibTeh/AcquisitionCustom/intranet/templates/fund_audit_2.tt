@@ -1,0 +1,331 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin :: Перевірка фонду (Аудит)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+[% INCLUDE 'doc-head-close.inc' %]
+
+<!-- Підключення бібліотеки для роботи з камерою -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<style>
+    body {
+        background-color: #f4f6f9;
+        font-size: 16px; /* Оптимально для уникнення автозуму на iOS */
+    }
+    .mobile-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 10px;
+    }
+    .card-audit {
+        border-radius: 12px;
+        border: none;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        margin-bottom: 15px;
+    }
+    .card-header-custom {
+        background: #2b3e50;
+        color: #fff;
+        border-radius: 12px 12px 0 0 !important;
+        padding: 12px 15px;
+    }
+    #reader {
+        width: 100%;
+        background: #000;
+        border-radius: 8px;
+        overflow: hidden;
+        min-height: 250px;
+    }
+    #reader video {
+        object-fit: cover;
+    }
+    .scan-status {
+        min-height: 50px;
+        font-weight: bold;
+        text-align: center;
+        border-radius: 8px;
+        padding: 10px;
+    }
+    .barcode-input-lg {
+        font-size: 1.2rem;
+        height: 48px;
+        text-align: center;
+        font-weight: bold;
+        letter-spacing: 1px;
+    }
+    .btn-mobile {
+        padding: 12px;
+        font-size: 1.1rem;
+        font-weight: bold;
+        border-radius: 8px;
+    }
+    .history-list-item {
+        font-size: 0.95rem;
+        border-left: 4px solid #6c757d;
+    }
+    .history-list-item.success { border-left-color: #28a745; }
+    .history-list-item.warning { border-left-color: #ffc107; }
+    .history-list-item.danger { border-left-color: #dc3545; }
+</style>
+</head>
+
+<body id="plug_fund_audit" class="plug">
+
+<div class="mobile-container">
+    
+    <!-- Шапка з кнопкою повернення -->
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool" class="btn btn-outline-secondary btn-sm">
+            <i class="fa fa-arrow-left"></i> Меню
+        </a>
+        <h5 class="m-0 text-dark"><i class="fa fa-barcode"></i> Аудит фонду</h5>
+        <span class="badge badge-info">v1.2</span>
+    </div>
+
+    <!-- 1. СЕКЦІЯ: Вибір активного сеансу перевірки -->
+    <div class="card card-audit">
+        <div class="card-header card-header-custom">
+            <i class="fa fa-tasks"></i> Сеанс інвентаризації
+        </div>
+        <div class="card-body p-3">
+            <form id="selectAuditForm" method="get" action="/cgi-bin/koha/plugins/run.pl">
+                <input type="hidden" name="class" value="[% PLUGIN_CLASS %]" />
+                <input type="hidden" name="method" value="tool" />
+                <input type="hidden" name="op" value="audit" />
+
+                <div class="form-group mb-2">
+                    <label for="audit_id" class="small font-weight-bold">Оберіть перевірку:</label>
+                    <select name="audit_id" id="audit_id" class="form-control" onchange="this.form.submit()">
+                        <option value="">-- Оберіть сеанс перевірки --</option>
+                        [% FOREACH a IN active_audits %]
+                            <option value="[% a.id %]" [% IF a.id == current_audit_id %]selected[% END %]>
+                                [% a.title %] ([% a.location_name %])
+                            </option>
+                        [% END %]
+                    </select>
+                </div>
+            </form>
+
+            [% IF current_audit %]
+                <div class="small text-muted mt-2">
+                    <div><strong>Підрозділ:</strong> [% current_audit.location_name %]</div>
+                    <div><strong>Опрацьовано:</strong> <span id="scanned_count">[% current_audit.scanned_count || 0 %]</span> / [% current_audit.total_expected || '?' %] прим.</div>
+                </div>
+            [% END %]
+        </div>
+    </div>
+
+    [% IF current_audit %]
+        <!-- 2. СЕКЦІЯ: Сканер Камери та Введення -->
+        <div class="card card-audit">
+            <div class="card-body p-3">
+
+                <!-- Кнопки керування камерою -->
+                <button id="btnToggleCamera" class="btn btn-primary btn-block btn-mobile mb-3">
+                    <i class="fa fa-camera"></i> Увімкнути сканер камери
+                </button>
+
+                <!-- Контейнер для відеопотоку камери -->
+                <div id="camera_container" style="display: none;" class="mb-3">
+                    <div id="reader"></div>
+                    <button id="btnCloseCamera" class="btn btn-secondary btn-block mt-2">
+                        Закрити камеру
+                    </button>
+                </div>
+
+                <!-- Форма сканування (працює також із зовнішнім сканером чи вручну) -->
+                <form id="scanForm" autocomplete="off" onsubmit="return handleManualSubmit(event);">
+                    <div class="form-group mb-2">
+                        <input type="text" 
+                               id="barcode_input" 
+                               name="barcode" 
+                               class="form-control barcode-input-lg" 
+                               placeholder="Штрих-код примірника..." 
+                               autofocus 
+                               required />
+                    </div>
+                    <button type="submit" class="btn btn-success btn-block btn-mobile">
+                        <i class="fa fa-check"></i> Зафіксувати
+                    </button>
+                </form>
+
+                <!-- Статус обробки останнього ШК -->
+                <div id="scan_status" class="scan-status mt-3" style="display:none;"></div>
+            </div>
+        </div>
+
+        <!-- 3. СЕКЦІЯ: Останні відскановані примірники -->
+        <div class="card card-audit">
+            <div class="card-header bg-light font-weight-bold small">
+                Останні зчитані документи сеансу:
+            </div>
+            <ul class="list-group list-group-flush" id="history_list">
+                [% FOREACH item IN recent_scanned %]
+                    <li class="list-group-item history-list-item [% item.status_class %] p-2">
+                        <div class="d-flex justify-content-between">
+                            <strong>[% item.barcode %]</strong>
+                            <small class="text-muted">[% item.scan_time %]</small>
+                        </div>
+                        <div class="small text-truncate">[% item.title %]</div>
+                        <div class="small text-muted">[% item.location %] | [% item.callnumber %]</div>
+                    </li>
+                [% END %]
+            </ul>
+        </div>
+    [% ELSE %]
+        <div class="alert alert-warning text-center">
+            Будь ласка, оберіть активну перевірку зі списку вище, щоб розпочати сканування.
+        </div>
+    [% END %]
+
+</div>
+
+[% INCLUDE 'intranet-bottom.inc' %]
+
+<script>
+    var html5QrCode = null;
+    var currentAuditId = "[% current_audit_id %]";
+
+    $(document).ready(function() {
+        // Завжди тримаємо фокус на полі введення для роботи з Bluetooth-сканером
+        focusBarcode();
+
+        $('#btnToggleCamera').on('click', function() {
+            startCamera();
+        });
+
+        $('#btnCloseCamera').on('click', function() {
+            stopCamera();
+        });
+    });
+
+    function focusBarcode() {
+        $('#barcode_input').focus();
+    }
+
+    // --- Робота з камерою (Html5Qrcode) ---
+    function startCamera() {
+        $('#camera_container').slideDown();
+        $('#btnToggleCamera').hide();
+
+        html5QrCode = new Html5Qrcode("reader");
+        var config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+        html5QrCode.start(
+            { facingMode: "environment" }, // Використовуємо задню камеру
+            config,
+            onScanSuccess
+        ).catch(function(err) {
+            showStatus("Помилка доступу до камери: " + err, "danger");
+            stopCamera();
+        });
+    }
+
+    function stopCamera() {
+        if (html5QrCode) {
+            html5QrCode.stop().then(function() {
+                html5QrCode.clear();
+                $('#camera_container').slideUp();
+                $('#btnToggleCamera').show();
+                focusBarcode();
+            }).catch(function(err) {
+                console.error(err);
+            });
+        }
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+        // Зчитано штрих-код з камери
+        $('#barcode_input').val(decodedText);
+        
+        // Вібрація смартфона при успішному зчитуванні (якщо підтримується)
+        if (navigator.vibrate) {
+            navigator.vibrate(100);
+        }
+        
+        processBarcode(decodedText);
+    }
+
+    function handleManualSubmit(e) {
+        e.preventDefault();
+        var barcode = $('#barcode_input').val().trim();
+        if (barcode) {
+            processBarcode(barcode);
+        }
+        return false;
+    }
+
+    // --- Відправка штрих-коду на сервер (AJAX) ---
+    function processBarcode(barcode) {
+        if (!currentAuditId) {
+            showStatus("Не обрано сеанс перевірки!", "danger");
+            return;
+        }
+
+        $('#barcode_input').prop('disabled', true);
+
+        $.ajax({
+            url: '/cgi-bin/koha/plugins/run.pl',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                class: '[% PLUGIN_CLASS %]',
+                method: 'tool',
+                op: 'ajax_scan_item',
+                audit_id: currentAuditId,
+                barcode: barcode
+            },
+            success: function(response) {
+                $('#barcode_input').prop('disabled', false).val('');
+                focusBarcode();
+
+                if (response.success) {
+                    showStatus(response.message, response.alert_type || "success");
+                    
+                    // Оновлення лічильника
+                    if (response.scanned_count) {
+                        $('#scanned_count').text(response.scanned_count);
+                    }
+
+                    // Додавання запису в історію на сторінці
+                    addHistoryItem(response.item);
+                } else {
+                    showStatus(response.message, "danger");
+                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Подвійна вібрація при помилці
+                }
+            },
+            error: function() {
+                $('#barcode_input').prop('disabled', false);
+                focusBarcode();
+                showStatus("Помилка з'єднання з сервером!", "danger");
+            }
+        });
+    }
+
+    function showStatus(msg, type) {
+        var statusDiv = $('#scan_status');
+        statusDiv.removeClass('alert-success alert-danger alert-warning alert-info')
+                 .addClass('alert alert-' + type)
+                 .html(msg)
+                 .show();
+    }
+
+    function addHistoryItem(item) {
+        if (!item) return;
+        
+        var html = '<li class="list-group-item history-list-item ' + (item.status_class || '') + ' p-2">' +
+            '<div class="d-flex justify-content-between">' +
+                '<strong>' + item.barcode + '</strong>' +
+                '<small class="text-muted">Щойно</small>' +
+            '</div>' +
+            '<div class="small text-truncate">' + (item.title || 'Без назви') + '</div>' +
+            '<div class="small text-muted">' + (item.location || '') + ' | ' + (item.callnumber || '') + '</div>' +
+        '</li>';
+
+        $('#history_list').prepend(html);
+
+        // Обмежуємо список останніми 10 елементами
+        if ($('#history_list li').length > 10) {
+            $('#history_list li:last').remove();
+        }
+    }
+</script>

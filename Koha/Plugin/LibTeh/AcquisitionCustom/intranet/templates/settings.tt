@@ -1,0 +1,314 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin :: Налаштування та шаблони</title>
+[% INCLUDE 'doc-head-close.inc' %]
+
+<style>
+    .rtf-tag {
+        font-family: monospace;
+        background-color: #f8f9fa;
+        border: 1px solid #e3e6f0;
+        padding: 2px 6px;
+        border-radius: 4px;
+        color: #d63384;
+        display: inline-block;
+        margin: 2px;
+    }
+    .tab-content {
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-top: none;
+        padding: 20px;
+        border-radius: 0 0 4px 4px;
+    }
+</style>
+</head>
+
+<body id="plug_settings" class="plug">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-toolbar.inc' %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            
+            <div class="d-sm-flex align-items-center justify-content-between mb-3 mt-3">
+                <h1 class="h3 mb-0 text-gray-800">
+                    <i class="fa fa-sliders"></i> Налаштування плагіна та шаблонів
+                </h1>
+                <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool" class="btn btn-sm btn-outline-secondary">
+                    <i class="fa fa-arrow-left"></i> Повернутися до Головного меню
+                </a>
+            </div>
+
+            [% IF message %]
+                <div class="alert alert-[% message_type || 'info' %] alert-dismissible fade show" role="alert">
+                    [% message %]
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            [% END %]
+
+            <!-- Вкладки (Tabs) -->
+            <ul class="nav nav-tabs" id="settingsTabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" id="rtf-tab" data-toggle="tab" href="#rtf_panel" role="tab" aria-controls="rtf_panel" aria-selected="true">
+                        <i class="fa fa-file-text-o"></i> RTF-шаблони документів
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="rzn-tab" data-toggle="tab" href="#rzn_panel" role="tab" aria-controls="rzn_panel" aria-selected="false">
+                        <i class="fa fa-list-ol"></i> Довідник Розділів Знань (RZN)
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="help-tab" data-toggle="tab" href="#help_panel" role="tab" aria-controls="help_panel" aria-selected="false">
+                        <i class="fa fa-code"></i> Довідник зміних шаблонів
+                    </a>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="settingsTabsContent">
+                
+                <!-- 1. ВКЛАДКА: RTF-шаблони -->
+                <div class="tab-pane fade show active" id="rtf_panel" role="tabpanel" aria-labelledby="rtf-tab">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <p class="text-muted mb-0">Керування друкарськими шаблонами актів КСО та інвентаризаційних відомостей у форматі .rtf</p>
+                        <button class="btn btn-success btn-sm" data-toggle="modal" data-target="#uploadRtfModal">
+                            <i class="fa fa-upload"></i> Завантажити новий RTF-шаблон
+                        </button>
+                    </div>
+
+                    <table class="table table-bordered table-striped" id="rtf_table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Назва шаблону</th>
+                                <th>Код / Напризначення</th>
+                                <th>Файл</th>
+                                <th>Дата оновлення</th>
+                                <th>Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            [% FOREACH tpl IN rtf_templates %]
+                                <tr>
+                                    <td>[% tpl.id %]</td>
+                                    <td><strong>[% tpl.name %]</strong></td>
+                                    <td><code>[% tpl.code %]</code></td>
+                                    <td><i class="fa fa-file-word-o text-primary"></i> [% tpl.filename %]</td>
+                                    <td>[% tpl.updated_at %]</td>
+                                    <td>
+                                        <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=download_rtf&id=[% tpl.id %]" class="btn btn-sm btn-outline-info" title="Завантажити">
+                                            <i class="fa fa-download"></i>
+                                        </a>
+                                        <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=delete_rtf&id=[% tpl.id %]" class="btn btn-sm btn-outline-danger" onclick="return confirm('Ви впевнені, що бажаєте видалити цей шаблон?');" title="Видалити">
+                                            <i class="fa fa-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            [% CHARACTER %]
+                            [% UNLESS rtf_templates.size %]
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">Шаблонів ще не завантажено</td>
+                                </tr>
+                            [% END %]
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 2. ВКЛАДКА: Розділи Знань (RZN) -->
+                <div class="tab-pane fade" id="rzn_panel" role="tabpanel" aria-labelledby="rzn-tab">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <p class="text-muted mb-0">Налаштування відповідності кодів галузей знань/класифікації для підсумкових таблиць КСО</p>
+                        <button class="btn btn-primary btn-sm" data-toggle="modal" data-target="#addRznModal">
+                            <i class="fa fa-plus"></i> Додати новий розділ
+                        </button>
+                    </div>
+
+                    <table class="table table-bordered table-hover" id="rzn_table">
+                        <thead>
+                            <tr>
+                                <th>№ з/п</th>
+                                <th>Код (Індекс)</th>
+                                <th>Найменування розділу знань</th>
+                                <th>Порядок</th>
+                                <th>Дії</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            [% FOREACH rzn IN rzn_list %]
+                                <tr>
+                                    <td>[% rzn.id %]</td>
+                                    <td><code>[% rzn.code %]</code></td>
+                                    <td>[% rzn.name %]</td>
+                                    <td>[% rzn.sort_order %]</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary edit-rzn-btn" 
+                                                data-id="[% rzn.id %]" 
+                                                data-code="[% rzn.code %]" 
+                                                data-name="[% rzn.name %]"
+                                                data-sort="[% rzn.sort_order %]">
+                                            <i class="fa fa-pencil"></i>
+                                        </button>
+                                        <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=delete_rzn&id=[% rzn.id %]" class="btn btn-sm btn-outline-danger" onclick="return confirm('Видалити цей розділ?');">
+                                            <i class="fa fa-trash"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                            [% END %]
+                            [% UNLESS rzn_list.size %]
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Довідник порожній</td>
+                                </tr>
+                            [% END %]
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 3. ВКЛАДКА: Довідник змінних -->
+                <div class="tab-pane fade" id="help_panel" role="tabpanel" aria-labelledby="help-tab">
+                    <h5>Доступні мітки для застави в RTF-шаблонах</h5>
+                    <p class="text-muted">Вставте ці теги в структуру ваших `.rtf` файлів. При формуванні документа вони будуть замінені на реальні значення з бази даних.</p>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Загальні поля акта:</h6>
+                            <ul>
+                                <li><span class="rtf-tag">[% ACT_NUMBER %]</span> — Номер акта</li>
+                                <li><span class="rtf-tag">[% ACT_DATE %]</span> — Дата акта</li>
+                                <li><span class="rtf-tag">[% SUPPLIER_NAME %]</span> — Постачальник / Джерело</li>
+                                <li><span class="rtf-tag">[% TOTAL_DOCS %]</span> — Загальна кількість примірників</li>
+                                <li><span class="rtf-tag">[% TOTAL_PRICE %]</span> — Загальна сума (грн)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Циклічні табличні блоки (Спискові дані):</h6>
+                            <ul>
+                                <li><span class="rtf-tag">[% START_ITEMS_ROW %]</span> ... <span class="rtf-tag">[% END_ITEMS_ROW %]</span> — Початок і кінець рядка таблиці книг</li>
+                                <li><span class="rtf-tag">[% ITEM_TITLE %]</span> — Назва книги / видання</li>
+                                <li><span class="rtf-tag">[% ITEM_AUTHOR %]</span> — Автор</li>
+                                <li><span class="rtf-tag">[% BARCODE %]</span> — Штрих-код примірника</li>
+                                <li><span class="rtf-tag">[% PRICE %]</span> — Ціна примірника</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div> <!-- /tab-content -->
+
+        </div>
+    </div>
+</div>
+
+<!-- МОДАЛЬНЕ ВІКНО: Завантаження RTF -->
+<div class="modal fade" id="uploadRtfModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <form action="/cgi-bin/koha/plugins/run.pl" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="class" value="[% PLUGIN_CLASS %]" />
+            <input type="hidden" name="method" value="tool" />
+            <input type="hidden" name="op" value="upload_rtf" />
+
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fa fa-upload"></i> Завантаження RTF-шаблону</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="tpl_name">Назва шаблону <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="tpl_name" name="tpl_name" required placeholder="напр., Акт надходження літератури">
+                    </div>
+                    <div class="form-group">
+                        <label for="tpl_code">Системний код <span class="text-danger">*</span></label>
+                        <select class="form-control" id="tpl_code" name="tpl_code" required>
+                            <option value="kso1_act">Акт КСО 1 (Надходження)</option>
+                            <option value="kso2_act">Акт КСО 2 (Вибуття)</option>
+                            <option value="audit_sheet">Інвентаризаційний опис</option>
+                            <option value="custom">Інший шаблон</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="rtf_file">Файл (.rtf) <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control-file" id="rtf_file" name="rtf_file" accept=".rtf" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-success">Завантажити</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- МОДАЛЬНЕ ВІКНО: Додавання / Редагування RZN -->
+<div class="modal fade" id="addRznModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <form action="/cgi-bin/koha/plugins/run.pl" method="post" id="rznForm">
+            [% INCLUDE 'csrf-token.inc' %]
+            <input type="hidden" name="class" value="[% PLUGIN_CLASS %]" />
+            <input type="hidden" name="method" value="tool" />
+            <input type="hidden" name="op" value="cud-save_rzn" />
+            <input type="hidden" name="rzn_id" id="rzn_id" value="" />
+
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="rznModalTitle"><i class="fa fa-plus"></i> Додати Розділ Знань</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="rzn_code">Код / Індекс розділу <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="rzn_code" name="rzn_code" required placeholder="напр., 63/65 або 1">
+                    </div>
+                    <div class="form-group">
+                        <label for="rzn_name">Найменування розділу <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="rzn_name" name="rzn_name" required placeholder="напр., Техніка та технічні науки">
+                    </div>
+                    <div class="form-group">
+                        <label for="rzn_sort">Порядок сортування</label>
+                        <input type="number" class="form-control" id="rzn_sort" name="rzn_sort" value="10">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-primary">Зберегти</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+[% INCLUDE 'intranet-bottom.inc' %]
+
+<script>
+    $(document).ready(function() {
+        // Редагування запису RZN
+        $('.edit-rzn-btn').on('click', function() {
+            var id   = $(this).data('id');
+            var code = $(this).data('code');
+            var name = $(this).data('name');
+            var sort = $(this).data('sort');
+
+            $('#rzn_id').val(id);
+            $('#rzn_code').val(code);
+            $('#rzn_name').val(name);
+            $('#rzn_sort').val(sort);
+
+            $('#rznModalTitle').html('<i class="fa fa-pencil"></i> Редагувати Розділ Знань');
+            $('#addRznModal').modal('show');
+        });
+
+        // Скидання форми при закритті
+        $('#addRznModal').on('hidden.bs.modal', function () {
+            $('#rzn_id').val('');
+            $('#rznForm')[0].reset();
+            $('#rznModalTitle').html('<i class="fa fa-plus"></i> Додати Розділ Знань');
+        });
+    });
+</script>

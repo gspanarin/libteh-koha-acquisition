@@ -1,0 +1,239 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin :: Модуль комплектування та обліку фонду</title>
+[% INCLUDE 'doc-head-close.inc' %]
+
+<style>
+    .plugin-dashboard {
+        margin-top: 15px;
+    }
+    .module-card {
+        border: 1px solid #e3e6f0;
+        border-radius: 8px;
+        background: #ffffff;
+        margin-bottom: 25px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.08);
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .module-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 0.5rem 2rem 0 rgba(58, 59, 69, 0.15);
+    }
+    .module-header {
+        padding: 15px 20px;
+        border-bottom: 1px solid #e3e6f0;
+        border-radius: 8px 8px 0 0;
+        font-weight: bold;
+        font-size: 1.1em;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .module-icon {
+        font-size: 1.5em;
+        margin-right: 10px;
+    }
+    .module-body {
+        padding: 20px;
+        flex-grow: 1;
+        color: #5a5c69;
+    }
+    .module-footer {
+        padding: 15px 20px;
+        background-color: #f8f9fc;
+        border-top: 1px solid #e3e6f0;
+        border-radius: 0 0 8px 8px;
+    }
+    .stats-card {
+        border-left: 4px solid #4e73df;
+        background: #fff;
+        padding: 15px;
+        border-radius: 4px;
+        box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.05);
+        margin-bottom: 20px;
+    }
+    .stats-card.success { border-left-color: #1cc88a; }
+    .stats-card.warning { border-left-color: #f6c23e; }
+    .stats-card.danger { border-left-color: #e74a3b; }
+    
+    .stats-title {
+        font-size: 0.8rem;
+        font-weight: bold;
+        text-transform: uppercase;
+        color: #858796;
+    }
+    .stats-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #5a5c69;
+    }
+</style>
+</head>
+
+<body id="plug_main" class="plug">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-toolbar.inc' %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            
+            <div class="d-sm-flex align-items-center justify-content-between mb-4 mt-3">
+                <h1 class="h3 mb-0 text-gray-800">
+                    <i class="fa fa-cubes"></i> Комплектування та облік бібліотечного фонду
+                </h1>
+                <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=settings" class="btn btn-sm btn-outline-secondary">
+                    <i class="fa fa-cog"></i> Налаштування плагіна
+                </a>
+            </div>
+
+            <!-- Швидка статистика (Статистичні картки) -->
+            <div class="row">
+                <div class="col-xl-3 col-md-6">
+                    <div class="stats-card">
+                        <div class="stats-title">Записів КСО 1 (Надходження)</div>
+                        <div class="stats-value">[% stats.total_kso1 || 0 %]</div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="stats-card danger">
+                        <div class="stats-title">Записів КСО 2 (Вибуття)</div>
+                        <div class="stats-value">[% stats.total_kso2 || 0 %]</div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="stats-card success">
+                        <div class="stats-title">Активних перевірок фонду</div>
+                        <div class="stats-value">[% stats.active_audits || 0 %]</div>
+                    </div>
+                </div>
+                <div class="col-xl-3 col-md-6">
+                    <div class="stats-card warning">
+                        <div class="stats-title">Друк. шаблонів RTF</div>
+                        <div class="stats-value">[% stats.total_rtf || 0 %]</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Головне сітка розділів (Dashboard Grid) -->
+            <div class="row plugin-dashboard">
+
+                <!-- 1. Розділ Надходження -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="module-card">
+                        <div class="module-header bg-light text-primary">
+                            <span><i class="fa fa-download module-icon"></i> 1. Надходження</span>
+                        </div>
+                        <div class="module-body">
+                            <p>Керування статистикою та обліком надходжень до фонду:</p>
+                            <ul>
+                                <li>Книга сумарного обліку надходження (КСО 1)</li>
+                                <li>Контроль правильності підрахунку партій</li>
+                                <li>Друк актів та листівок КСО 1</li>
+                            </ul>
+                        </div>
+                        <div class="module-footer">
+                            <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=kso_in" class="btn btn-primary btn-block">
+                                Перейти до надходжень &raquo;
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Розділ Вибуття -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="module-card">
+                        <div class="module-header bg-light text-danger">
+                            <span><i class="fa fa-upload module-icon"></i> 2. Вибуття</span>
+                        </div>
+                        <div class="module-body">
+                            <p>Облік списку та вилучення літератури з фондів бібліотеки:</p>
+                            <ul>
+                                <li>Книга сумарного обліку вибуття (КСО 2)</li>
+                                <li>Реєстрація причин та актів списання</li>
+                                <li>Друк актів вибуття та листок КСО 2</li>
+                            </ul>
+                        </div>
+                        <div class="module-footer">
+                            <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=kso_out" class="btn btn-danger btn-block">
+                                Перейти до вибуття &raquo;
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3. Рух фонду -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="module-card">
+                        <div class="module-header bg-light text-info">
+                            <span><i class="fa fa-exchange module-icon"></i> 3. Рух фонду</span>
+                        </div>
+                        <div class="module-body">
+                            <p>Зведені підсумки та динаміка наповнення фонду за періоди:</p>
+                            <ul>
+                                <li>Книга сумарного обліку руху фонду (КСО 3)</li>
+                                <li>Розрахунок базингів та балансу за обраний термін</li>
+                                <li>Автоматичне агрегування надходжень і списань</li>
+                            </ul>
+                        </div>
+                        <div class="module-footer">
+                            <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=kso_movement" class="btn btn-info btn-block">
+                                Перейти до руху фонду &raquo;
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. Перевірка фонду (Інвентаризація) -->
+                <div class="col-md-6 col-lg-6 mt-3">
+                    <div class="module-card">
+                        <div class="module-header bg-light text-success">
+                            <span><i class="fa fa-barcode module-icon"></i> 4. Перевірка фонду (Аудит)</span>
+                        </div>
+                        <div class="module-body">
+                            <p>Інструмент проведення інвентаризації та перевірки наявності документів:</p>
+                            <ul>
+                                <li>Адаптивний інтерфейс для роботи зі **смартфона**</li>
+                                <li>Зчитування штрих-кодів відеокамерою або Bluetooth-сканером</li>
+                                <li>Контроль відповідності підрозділів зберігання</li>
+                            </ul>
+                        </div>
+                        <div class="module-footer">
+                            <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=audit" class="btn btn-success btn-block">
+                                Відкрити перевірки фонду &raquo;
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5. Налаштування та Шаблони -->
+                <div class="col-md-6 col-lg-6 mt-3">
+                    <div class="module-card">
+                        <div class="module-header bg-light text-dark">
+                            <span><i class="fa fa-sliders module-icon"></i> 5. Налаштування та Шаблони</span>
+                        </div>
+                        <div class="module-body">
+                            <p>Конфігурація системи та друкарських форм:</p>
+                            <ul>
+                                <li>Завантаження та налаштування змінних у **RTF-шаблонах**</li>
+                                <li>Редагування довідника Розділів знань (**RZN**)</li>
+                                <li>Перевірка стану таблиць та інсталятора</li>
+                            </ul>
+                        </div>
+                        <div class="module-footer">
+                            <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=settings" class="btn btn-dark btn-block">
+                                Управління налаштуваннями &raquo;
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+            </div> <!-- /row -->
+
+        </div>
+    </div>
+</div>
+
+[% INCLUDE 'intranet-bottom.inc' %]

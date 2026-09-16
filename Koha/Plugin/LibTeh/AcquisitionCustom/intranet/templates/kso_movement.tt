@@ -1,0 +1,251 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin :: Книга сумарного обліку руху фонду (КСО 3)</title>
+[% INCLUDE 'doc-head-close.inc' %]
+
+<link rel="stylesheet" type="text/css" href="[% interface %]/[% theme %]/css/datatables.css" />
+[% INCLUDE 'datatables.inc' %]
+
+<style>
+    .movement-summary-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-left: 5px solid #007bff;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    .calc-box {
+        text-align: center;
+        padding: 10px;
+        background: #fff;
+        border: 1px solid #e3e6f0;
+        border-radius: 6px;
+    }
+    .calc-title {
+        font-size: 0.85em;
+        text-transform: uppercase;
+        color: #6c757d;
+        font-weight: bold;
+    }
+    .calc-value {
+        font-size: 1.4em;
+        font-weight: bold;
+        margin-top: 5px;
+    }
+    .text-plus { color: #28a745; }
+    .text-minus { color: #dc3545; }
+    .text-total { color: #0056b3; }
+</style>
+</head>
+
+<body id="plug_kso_movement" class="plug">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-toolbar.inc' %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <p><a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool">&laquo; Назад до головної плагіна</a></p>
+
+            <h2>Книга сумарного обліку руху фонду (КСО 3)</h2>
+
+            <!-- Форма фільтрації та розрахунку за період -->
+            <div class="movement-summary-card">
+                <form id="filter_form" method="get" action="/cgi-bin/koha/plugins/run.pl">
+                    <input type="hidden" name="class" value="[% PLUGIN_CLASS %]" />
+                    <input type="hidden" name="method" value="tool" />
+                    <input type="hidden" name="op" value="kso_movement" />
+
+                    <div class="row align-items-end">
+                        <div class="col-md-3 form-group">
+                            <label for="base_period_id"><strong>Базовий стан (Базинг):</strong></label>
+                            <select class="form-control" name="base_period_id" id="base_period_id" onchange="this.form.submit()">
+                                <option value="">-- Початкове заснування фонду (0) --</option>
+                                [% FOREACH b IN previous_periods %]
+                                    <option value="[% b.id %]" [% IF b.id == selected_base_id %]selected[% END %]>
+                                        [% b.period_title | html %] (на [% b.end_date %]: [% b.end_items %] прим. / [% b.end_amount | $Price %])
+                                    </option>
+                                [% END %]
+                            </select>
+                        </div>
+
+                        <div class="col-md-3 form-group">
+                            <label for="start_date"><strong>Початок періоду:</strong></label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" value="[% start_date %]" required />
+                        </div>
+
+                        <div class="col-md-3 form-group">
+                            <label for="end_date"><strong>Кінець періоду:</strong></label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" value="[% end_date %]" required />
+                        </div>
+
+                        <div class="col-md-3 form-group">
+                            <button type="submit" class="btn btn-primary"><i class="fa fa-calculator"></i> Розрахувати рух</button>
+                            <button type="button" class="btn btn-success" onclick="openSavePeriodModal()"><i class="fa fa-save"></i> Фіксувати період</button>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Індикаторний підсумок розрахунку -->
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <div class="calc-box">
+                            <div class="calc-title">На початок періоду</div>
+                            <div class="calc-value">[% calc.start_items || 0 %] <small style="font-size: 0.5em;">прим.</small></div>
+                            <small class="text-muted">[% calc.start_amount || 0 | $Price %]</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="calc-box">
+                            <div class="calc-title text-plus">+ Надходження за період</div>
+                            <div class="calc-value text-plus">+[% calc.in_items || 0 %] <small style="font-size: 0.5em;">прим.</small></div>
+                            <small class="text-muted">+[% calc.in_amount || 0 | $Price %]</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="calc-box">
+                            <div class="calc-title text-minus">- Вибуття за період</div>
+                            <div class="calc-value text-minus">-[% calc.out_items || 0 %] <small style="font-size: 0.5em;">прим.</small></div>
+                            <small class="text-muted">-[% calc.out_amount || 0 | $Price %]</small>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="calc-box" style="border-color: #0056b3; background-color: #f0f7ff;">
+                            <div class="calc-title text-total">Стан на кінець періоду</div>
+                            <div class="calc-value text-total">[% calc.end_items || 0 %] <small style="font-size: 0.5em;">прим.</small></div>
+                            <small class="text-muted" style="font-weight: bold;">[% calc.end_amount || 0 | $Price %]</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <h3>Історія зафіксованих періодів руху фонду</h3>
+
+            <!-- Таблиця зафіксованих періодів (КСО 3) -->
+            <table id="table_kso_movement" class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th rowspan="2">ID</th>
+                        <th rowspan="2">Назва періоду</th>
+                        <th rowspan="2">Дати періоду</th>
+                        <th colspan="2" class="text-center">Стан на початок</th>
+                        <th colspan="2" class="text-center text-plus">Надійшло</th>
+                        <th colspan="2" class="text-center text-minus">Вибуло</th>
+                        <th colspan="2" class="text-center text-total">Стан на кінець</th>
+                        <th rowspan="2">Дії</th>
+                    </tr>
+                    <tr>
+                        <th>Прим.</th>
+                        <th>Сума</th>
+                        <th>Прим.</th>
+                        <th>Сума</th>
+                        <th>Прим.</th>
+                        <th>Сума</th>
+                        <th>Прим.</th>
+                        <th>Сума</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    [% FOREACH m IN movement_records %]
+                        <tr>
+                            <td>[% m.id %]</td>
+                            <td><strong>[% m.period_title | html %]</strong></td>
+                            <td>[% m.start_date %] &mdash; [% m.end_date %]</td>
+                            <td>[% m.start_items %]</td>
+                            <td>[% m.start_amount | $Price %]</td>
+                            <td class="text-plus">+[% m.in_items %]</td>
+                            <td class="text-plus">+[% m.in_amount | $Price %]</td>
+                            <td class="text-minus">-[% m.out_items %]</td>
+                            <td class="text-minus">-[% m.out_amount | $Price %]</td>
+                            <td class="text-total"><strong>[% m.end_items %]</strong></td>
+                            <td class="text-total"><strong>[% m.end_amount | $Price %]</strong></td>
+                            <td>
+                                <button class="btn btn-sm btn-danger" onclick="deletePeriod([% m.id %])">
+                                    <i class="fa fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    [% END %]
+                </tbody>
+            </table>
+
+        </div>
+    </div>
+</div>
+
+<!-- ==================== МОДАЛЬНЕ ВІКНО: ЗБЕРЕЖЕННЯ / ФІКСАЦІЯ ПЕРІОДУ ==================== -->
+<div class="modal fade" id="savePeriodModal" tabindex="-1" role="dialog" aria-labelledby="savePeriodModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="post" action="/cgi-bin/koha/plugins/run.pl">
+                [% INCLUDE 'csrf-token.inc' %]
+                <input type="hidden" name="class" value="[% PLUGIN_CLASS %]" />
+                <input type="hidden" name="method" value="tool" />
+                <input type="hidden" name="op" value="cud-save_kso_movement" />
+
+                <!-- Передача розрахованих даних -->
+                <input type="hidden" name="base_id" value="[% selected_base_id %]" />
+                <input type="hidden" name="start_date" value="[% start_date %]" />
+                <input type="hidden" name="end_date" value="[% end_date %]" />
+                <input type="hidden" name="start_items" value="[% calc.start_items %]" />
+                <input type="hidden" name="start_amount" value="[% calc.start_amount %]" />
+                <input type="hidden" name="in_items" value="[% calc.in_items %]" />
+                <input type="hidden" name="in_amount" value="[% calc.in_amount %]" />
+                <input type="hidden" name="out_items" value="[% calc.out_items %]" />
+                <input type="hidden" name="out_amount" value="[% calc.out_amount %]" />
+                <input type="hidden" name="end_items" value="[% calc.end_items %]" />
+                <input type="hidden" name="end_amount" value="[% calc.end_amount %]" />
+
+                <div class="modal-header">
+                    <h5 class="modal-title" id="savePeriodModalLabel">Фіксація запису руху фонду</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="period_title" class="required">Назва запису / періоду:</label>
+                        <input type="text" class="form-control" id="period_title" name="period_title" value="Рух фонду за [% start_date %] - [% end_date %]" required />
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>Підсумок до фіксації:</strong><br/>
+                        Початок: [% calc.start_items %] прим. ([% calc.start_amount | $Price %])<br/>
+                        Надійшло: +[% calc.in_items %] прим. (+[% calc.in_amount | $Price %])<br/>
+                        Вибуло: -[% calc.out_items %] прим. (-[% calc.out_amount | $Price %])<br/>
+                        <strong>Кінець періоду: [% calc.end_items %] прим. ([% calc.end_amount | $Price %])</strong>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-success">Зафіксувати в КСО 3</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    const PLUGIN_URL = "/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool";
+
+    $(document).ready(function() {
+        $("#table_kso_movement").dataTable($.extend(true, {}, setDataTableDefaults(), {
+            "order": [[ 0, "desc" ]],
+            "pageLength": 10
+        }));
+    });
+
+    function openSavePeriodModal() {
+        $('#savePeriodModal').modal('show');
+    }
+
+    function deletePeriod(id) {
+        if (confirm("Ви дійсно бажаєте видалити цей зафіксований період руху фонду?")) {
+            window.location.href = PLUGIN_URL + "&op=delete_kso_movement&id=" + id;
+        }
+    }
+</script>
+
+[% INCLUDE 'intranet-bottom.inc' %]

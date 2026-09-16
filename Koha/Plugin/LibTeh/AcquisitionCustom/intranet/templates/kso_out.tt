@@ -1,0 +1,235 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha Plugin :: Книга сумарного обліку вибуття (КСО 2)</title>
+[% INCLUDE 'doc-head-close.inc' %]
+
+<style>
+    .kso-summary-box {
+        background: #fdf2f2;
+        border-left: 4px solid #dc3545;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+    .badge-reason {
+        font-size: 0.85em;
+        padding: 5px 8px;
+    }
+</style>
+</head>
+
+<body id="plug_kso_out" class="plug">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-toolbar.inc' %]
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+
+            <!-- Шапка сторінки -->
+            <div class="d-sm-flex align-items-center justify-content-between mb-3 mt-3">
+                <h1 class="h3 mb-0 text-gray-800">
+                    <i class="fa fa-upload text-danger"></i> Книга сумарного обліку вибуття (КСО 2)
+                </h1>
+                <div>
+                    <button class="btn btn-danger btn-sm" data-toggle="modal" data-target="#addKso2Modal">
+                        <i class="fa fa-plus"></i> Зареєструвати новий акт вибуття
+                    </button>
+                    <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool" class="btn btn-sm btn-outline-secondary">
+                        <i class="fa fa-arrow-left"></i> Меню
+                    </a>
+                </div>
+            </div>
+
+            [% IF message %]
+                <div class="alert alert-[% message_type || 'info' %] alert-dismissible fade show" role="alert">
+                    [% message %]
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+            [% END %]
+
+            <!-- Підсумкова картка КСО 2 -->
+            <div class="kso-summary-box d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="m-0 text-danger font-weight-bold">Загальні показники вибуття фонду</h5>
+                    <small class="text-muted">Загальна кількість вилучених примірників та їхня сумарна вартість за поточний період</small>
+                </div>
+                <div class="text-right">
+                    <span class="mr-3">Всього актів: <strong>[% total_acts || 0 %]</strong></span>
+                    <span class="mr-3">Списано примірників: <strong>[% total_docs || 0 %] прим.</strong></span>
+                    <span>На суму: <strong>[% total_price || '0.00' %] грн.</strong></span>
+                </div>
+            </div>
+
+            <!-- Таблиця записів КСО 2 -->
+            <div class="card shadow mb-4">
+                <div class="card-body p-3">
+                    <table class="table table-bordered table-striped table-hover" id="kso2_table">
+                        <thead>
+                            <tr>
+                                <th>№ акта</th>
+                                <th>Дата акта</th>
+                                <th>Причина списання / Примітка</th>
+                                <th>Підрозділ (Бібліотека)</th>
+                                <th>К-сть прим.</th>
+                                <th>Сума (грн)</th>
+                                <th>Дії / Друк</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            [% FOREACH row IN kso2_list %]
+                                <tr>
+                                    <td><strong>[% row.act_number %]</strong></td>
+                                    <td>[% row.act_date %]</td>
+                                    <td>
+                                        <span class="badge badge-secondary badge-reason">[% row.reason_name || 'Списання' %]</span>
+                                        [% IF row.note %]<div class="small text-muted mt-1">[% row.note %]</div>[% END %]
+                                    </td>
+                                    <td>[% row.branchname %]</td>
+                                    <td><strong class="text-danger">[% row.total_items %]</strong></td>
+                                    <td>[% sprintf("%.2f", row.total_price) %]</td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=print_kso2&id=[% row.id %]" class="btn btn-sm btn-outline-primary" title="Друк акта RTF">
+                                                <i class="fa fa-print"></i> RTF
+                                            </a>
+                                            <button class="btn btn-sm btn-outline-info edit-kso2-btn" 
+                                                    data-id="[% row.id %]"
+                                                    data-act-number="[% row.act_number %]"
+                                                    data-act-date="[% row.act_date_iso %]"
+                                                    data-reason="[% row.reason_code %]"
+                                                    data-branch="[% row.branchcode %]"
+                                                    data-note="[% row.note %]"
+                                                    title="Редагувати">
+                                                <i class="fa fa-pencil"></i>
+                                            </button>
+                                            <a href="/cgi-bin/koha/plugins/run.pl?class=[% PLUGIN_CLASS %]&method=tool&op=delete_kso2&id=[% row.id %]" class="btn btn-sm btn-outline-danger" onclick="return confirm('Ви впевнені, що бажаєте видалити цей запис КСО 2?');" title="Видалити">
+                                                <i class="fa fa-trash"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            [% END %]
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- МОДАЛЬНЕ ВІКНО: Створення / Редагування запису КСО 2 -->
+<div class="modal fade" id="addKso2Modal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <form action="/cgi-bin/koha/plugins/run.pl" method="post" id="kso2Form">
+            [% INCLUDE 'csrf-token.inc' %]
+            <input type="hidden" name="class" value="[% PLUGIN_CLASS %]" />
+            <input type="hidden" name="method" value="tool" />
+            <input type="hidden" name="op" value="cud-save_kso2" />
+            <input type="hidden" name="kso2_id" id="kso2_id" value="" />
+
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="kso2ModalTitle"><i class="fa fa-plus"></i> Реєстрація акта вибуття (КСО 2)</h5>
+                    <button type="button" class="close text-white" data-modal-dismiss="modal" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group col-md-4">
+                            <label for="act_number">№ Акта списання <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="act_number" name="act_number" required placeholder="напр., Акт-12/2026">
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="act_date">Дата акта <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="act_date" name="act_date" required>
+                        </div>
+                        <div class="form-group col-md-4">
+                            <label for="branchcode">Підрозділ (Бібліотека) <span class="text-danger">*</span></label>
+                            <select class="form-control" id="branchcode" name="branchcode" required>
+                                [% FOREACH b IN branches %]
+                                    <option value="[% b.branchcode %]">[% b.branchname %]</option>
+                                [% END %]
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group col-md-6">
+                            <label for="reason_code">Причина вибуття (списання) <span class="text-danger">*</span></label>
+                            <select class="form-control" id="reason_code" name="reason_code" required>
+                                <option value="ztop">Зношеність (затасканість)</option>
+                                <option value="ustar">Устарілість за змістом</option>
+                                <option value="vtrat">Втрата читачами</option>
+                                <option value="vydal">Втрата під час інвентаризації</option>
+                                <option value="avariya">Аварійний стан (пожежа/затоплення)</option>
+                                <option value="pereda">Передача до іншої бібліотеки</option>
+                            </select>
+                        </div>
+                        <div class="form-group col-md-6">
+                            <label for="note">Додаткова примітка / Зауваження</label>
+                            <input type="text" class="form-control" id="note" name="note" placeholder="напр., Рішення комісії №3">
+                        </div>
+                    </div>
+
+                    <hr>
+                    <div class="alert alert-warning small">
+                        <i class="fa fa-info-circle"></i> Після збереження заголовка акта ви зможете прив'язати конкретні списки списаних примірників або списити їх через пакетну обробку.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Скасувати</button>
+                    <button type="submit" class="btn btn-danger">Зберегти запис КСО 2</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+[% INCLUDE 'intranet-bottom.inc' %]
+
+<script>
+    $(document).ready(function() {
+        // Ініціалізація DataTables для швидкого пошуку та сортування
+        $('#kso2_table').DataTable({
+            "order": [[ 1, "desc" ]],
+            "language": {
+                "url": "/intranet-tmpl/prog/uk-UA/js/datatables-uk.json"
+            }
+        });
+
+        // Встановлення поточної дати за замовчуванням
+        document.getElementById('act_date').valueAsDate = new Date();
+
+        // Редагування запису КСО 2
+        $('.edit-kso2-btn').on('click', function() {
+            var id        = $(this).data('id');
+            var number    = $(this).data('act-number');
+            var date      = $(this).data('act-date');
+            var reason    = $(this).data('reason');
+            var branch    = $(this).data('branch');
+            var note      = $(this).data('note');
+
+            $('#kso2_id').val(id);
+            $('#act_number').val(number);
+            $('#act_date').val(date);
+            $('#reason_code').val(reason);
+            $('#branchcode').val(branch);
+            $('#note').val(note);
+
+            $('#kso2ModalTitle').html('<i class="fa fa-pencil"></i> Редагувати акт вибуття (КСО 2)');
+            $('#addKso2Modal').modal('show');
+        });
+
+        // Очищення форми при закритті модального вікна
+        $('#addKso2Modal').on('hidden.bs.modal', function () {
+            $('#kso2_id').val('');
+            $('#kso2Form')[0].reset();
+            document.getElementById('act_date').valueAsDate = new Date();
+            $('#kso2ModalTitle').html('<i class="fa fa-plus"></i> Реєстрація акта вибуття (КСО 2)');
+        });
+    });
+</script>
