@@ -1,0 +1,58 @@
+[% INCLUDE 'doc-head-open.inc' %]
+<title>Koha: Плагін "Друк каталожних карток": Налаштування</title>
+[% INCLUDE 'doc-head-close.inc' %]
+</head>
+<body id="plugins_configure" class="plugins">
+[% INCLUDE 'header.inc' %]
+[% INCLUDE 'cat-search.inc' %]
+
+<div id="breadcrumbs">
+    <a href="/cgi-bin/koha/mainpage.pl">Головна</a> &rsaquo; 
+    <a href="/cgi-bin/koha/plugins/plugins-home.pl">Плагіни</a> &rsaquo; 
+    Друк каталожних карток &rsaquo; Налаштування
+</div>
+
+<div class="main container-fluid">
+    <div class="row">
+        <div class="col-sm-12">
+            <h2>Налаштування плагіна "Друк каталожних карток"</h2>
+
+            [% IF saved %]
+                <div class="dialog message">Налаштування успішно збережено!</div>
+            [% END %]
+
+            <form method="post" action="/cgi-bin/koha/plugins/run.pl">
+                [% INCLUDE 'csrf-token.inc' %]
+                <input type="hidden" name="class" value="[% CLASS %]"/>
+                <input type="hidden" name="method" value="[% METHOD %]"/>
+                <input type="hidden" name="cud-save" value="1"/>
+
+                <div class="form-group">
+                    <label class="form-check-label">
+                        <input type="checkbox" name="enable_in_editor" value="1" [% IF enable_in_editor %]checked="checked"[% END %] />
+                        <b>Включно у редакторі (Додати кнопку вибору друку карток у панель каталогізації)</b>
+                    </label>
+                </div>
+
+                <hr/>
+
+                <div class="form-group">
+                    <label for="isbd_format_marc21"><b>Шаблон ISBD для MARC21:</b></label>
+                    <textarea class="form-control" id="isbd_format_marc21" name="isbd_format_marc21" rows="12" style="font-family: monospace; width: 100%;">[% isbd_format_marc21 | html %]</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="isbd_format_unimarc"><b>Шаблон ISBD для UNIMARC:</b></label>
+                    <textarea class="form-control" id="isbd_format_unimarc" name="isbd_format_unimarc" rows="12" style="font-family: monospace; width: 100%;">[% isbd_format_unimarc | html %]</textarea>
+                </div>
+
+                <div class="action">
+                    <input type="submit" class="btn btn-primary" value="Зберегти налаштування" />
+                    <a class="btn btn-default" href="/cgi-bin/koha/plugins/plugins-home.pl">Скасувати</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+[% INCLUDE 'intranet-bottom.inc' %]
